@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	pstreader "github.com/navid/pst2jmap/internal/pst"
+	pstreader "github.com/navid/pst2jmap-migration/internal/pst"
 )
 
 var version = "dev"
@@ -30,11 +30,11 @@ func main() {
 	flag.Usage = func() {
 
 		fmt.Fprintf(os.Stderr, "\n")
-		fmt.Fprintf(os.Stderr, "pst2jmap - Import Outlook PST files into Stalwart via JMAP\n")
+		fmt.Fprintf(os.Stderr, "pst2jmap-migration - Import Outlook PST files into Stalwart via JMAP\n")
 		fmt.Fprintf(os.Stderr, "\n")
 
 		fmt.Fprintf(os.Stderr, "USAGE\n")
-		fmt.Fprintf(os.Stderr, "  pst2jmap [options]\n")
+		fmt.Fprintf(os.Stderr, "  pst2jmap-migration [options]\n")
 		fmt.Fprintf(os.Stderr, "\n")
 
 		fmt.Fprintf(os.Stderr, "REQUIRED OPTIONS\n")
@@ -50,7 +50,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "\n")
 
 		fmt.Fprintf(os.Stderr, "EXAMPLES\n")
-		fmt.Fprintf(os.Stderr, "  pst2jmap \\\n")
+		fmt.Fprintf(os.Stderr, "  pst2jmap-migration \\\n")
 		fmt.Fprintf(os.Stderr, "    --pst ./backup.pst \\\n")
 		fmt.Fprintf(os.Stderr, "    --url https://mail.example.com/jmap \\\n")
 		fmt.Fprintf(os.Stderr, "    --user admin@example.com \\\n")

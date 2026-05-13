@@ -1,4 +1,4 @@
-module github.com/navid/pst2jmap
+module github.com/navid/pst2jmap-migration
 
 go 1.24.4
 
