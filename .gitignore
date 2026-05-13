@@ -7,17 +7,17 @@
 *.test
 *.out
 
+# Build output
+build/
+bin/
+dist/
+
 # Compiled release binaries
 pst2jmap-migration-linux-amd64
 pst2jmap-migration-linux-arm64
 pst2jmap-migration-windows-amd64.exe
 pst2jmap-migration-darwin-amd64
 pst2jmap-migration-darwin-arm64
-
-# Go build directories
-bin/
-dist/
-build/
 
 # Go workspace
 go.work
@@ -47,6 +47,9 @@ Thumbs.db
 # Temporary files
 tmp/
 temp/
+
+# Test data
+testdata/
 
 # PST / Outlook files
 *.pst
