@@ -3,8 +3,12 @@ package pstreader
 import (
 	"fmt"
 	"os"
+	"sort"
 
 	charsets "github.com/emersion/go-message/charset"
+
+	"github.com/navid/pst2jmap-migration/internal/model"
+
 	pst "github.com/mooijtech/go-pst/v6/pkg"
 	"github.com/rotisserie/eris"
 	"golang.org/x/text/encoding"
@@ -50,27 +54,23 @@ func (r *Reader) Close() error {
 func (r *Reader) WalkMailboxFolders() error {
 
 	allowedFolders := map[string]bool{
-		"Top-of-Information-Store": true,
-		"Inbox":                    true,
-		"Sent Items":               true,
-		"Sent-Items":               true,
-		"Drafts":                   true,
-		"Deleted Items":            true,
-		"Deleted-Items":            true,
-		"Junk Email":               true,
-		"Junk-Email":               true,
+		"Inbox":         true,
+		"Sent Items":    true,
+		"Sent-Items":    true,
+		"Drafts":        true,
+		"Deleted Items": true,
+		"Deleted-Items": true,
+		"Junk Email":    true,
+		"Junk-Email":    true,
 	}
 
 	return r.file.WalkFolders(func(folder *pst.Folder) error {
-		if folder.Name == "Top-of-Information-Store" {
-			return nil
-		}
 
 		if !allowedFolders[folder.Name] {
 			return nil
 		}
 
-		fmt.Printf("Folder: %s\n", folder.Name)
+		fmt.Printf("\nFolder: %s\n", folder.Name)
 
 		messageIterator, err := folder.GetMessageIterator()
 
@@ -82,13 +82,54 @@ func (r *Reader) WalkMailboxFolders() error {
 			return err
 		}
 
-		count := 0
+		var messages []*model.Message
 
 		for messageIterator.Next() {
-			count++
+
+			message := messageIterator.Value()
+
+			// Convert PST message -> internal model
+			msg, err := ExtractMessage(folder, message)
+
+			if err != nil {
+
+				fmt.Printf(
+					"Failed to extract message: %v\n",
+					err,
+				)
+
+				continue
+			}
+
+			if msg == nil {
+				continue
+			}
+
+			// ONLY STORE
+			messages = append(messages, msg)
 		}
 
-		fmt.Printf("Messages: %d\n\n", count)
+		// Sort by date descending
+		sort.Slice(messages, func(i, j int) bool {
+			return messages[i].Date.After(messages[j].Date)
+		})
+
+		// Print ONLY ONCE
+		for i, msg := range messages {
+
+			fmt.Printf(
+				"[%d] %s | %s | %s\n",
+				i+1,
+				msg.Date.Format("2006-01-02 15:04"),
+				msg.FromEmail,
+				msg.Subject,
+			)
+		}
+
+		fmt.Printf(
+			"\nProcessed messages: %d\n",
+			len(messages),
+		)
 
 		return messageIterator.Err()
 	})
