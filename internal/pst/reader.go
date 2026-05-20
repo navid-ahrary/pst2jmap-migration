@@ -3,11 +3,8 @@ package pstreader
 import (
 	"fmt"
 	"os"
-	"sort"
 
 	charsets "github.com/emersion/go-message/charset"
-
-	"github.com/navid/pst2jmap-migration/internal/model"
 
 	pst "github.com/mooijtech/go-pst/v6/pkg"
 	"github.com/rotisserie/eris"
@@ -64,7 +61,9 @@ func (r *Reader) WalkMailboxFolders() error {
 		"Junk-Email":    true,
 	}
 
-	return r.file.WalkFolders(func(folder *pst.Folder) error {
+	var processed int
+
+	err := r.file.WalkFolders(func(folder *pst.Folder) error {
 
 		if !allowedFolders[folder.Name] {
 			return nil
@@ -82,7 +81,7 @@ func (r *Reader) WalkMailboxFolders() error {
 			return err
 		}
 
-		var messages []*model.Message
+		var folderProcessed int
 
 		for messageIterator.Next() {
 
@@ -92,12 +91,10 @@ func (r *Reader) WalkMailboxFolders() error {
 			msg, err := ExtractMessage(folder, message)
 
 			if err != nil {
-
 				fmt.Printf(
 					"Failed to extract message: %v\n",
 					err,
 				)
-
 				continue
 			}
 
@@ -105,32 +102,45 @@ func (r *Reader) WalkMailboxFolders() error {
 				continue
 			}
 
-			// ONLY STORE
-			messages = append(messages, msg)
-		}
+			processed++
+			folderProcessed++
 
-		// Sort by date descending
-		sort.Slice(messages, func(i, j int) bool {
-			return messages[i].Date.After(messages[j].Date)
-		})
+			// TODO:
+			// Future migration step:
+			//
+			// err = migrateMessage(msg)
+			// if err != nil {
+			//     ...
+			// }
 
-		// Print ONLY ONCE
-		for i, msg := range messages {
+			_ = msg
 
-			fmt.Printf(
-				"[%d] %s | %s | %s\n",
-				i+1,
-				msg.Date.Format("2006-01-02 15:04"),
-				msg.FromEmail,
-				msg.Subject,
-			)
+			// Print progress every 100 messages
+			if processed%100 == 0 {
+
+				fmt.Printf(
+					"\rProcessed: %d",
+					processed,
+				)
+			}
 		}
 
 		fmt.Printf(
-			"\nProcessed messages: %d\n",
-			len(messages),
+			"\nFolder completed: %d messages\n",
+			folderProcessed,
 		)
 
 		return messageIterator.Err()
 	})
+
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf(
+		"\n\nCompleted. Total processed: %d\n",
+		processed,
+	)
+
+	return nil
 }
