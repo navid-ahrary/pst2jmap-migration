@@ -1,16 +1,19 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
+	"time"
 
-	pstreader "github.com/navid/pst2jmap-migration/internal/pst"
+	"github.com/navid/pst2jmap-migration/internal/pst"
 )
 
 var version = "dev"
 
 func main() {
+	startedAt := time.Now()
 
 	var (
 		pstFile  string
@@ -19,97 +22,220 @@ func main() {
 		password string
 	)
 
-	flag.StringVar(&pstFile, "pst", "", "Src. Path to PST file")
-	flag.StringVar(&jmapURL, "url", "", "Dest. JMAP mail server (Stalwart) endpoint")
-	flag.StringVar(&username, "user", "", "Dest. Username")
-	flag.StringVar(&password, "password", "", "Dest. Password")
+	flag.StringVar(
+		&pstFile,
+		"pst",
+		"",
+		"Src. Path to PST file",
+	)
 
-	showVersion := flag.Bool("version", false, "Show version")
+	flag.StringVar(
+		&jmapURL,
+		"url",
+		"",
+		"Dest. JMAP endpoint",
+	)
 
-	// Custom help output
-	flag.Usage = func() {
+	flag.StringVar(
+		&username,
+		"user",
+		"",
+		"Dest. Username",
+	)
 
-		fmt.Fprintf(os.Stderr, "\n")
-		fmt.Fprintf(os.Stderr, "pst2jmap-migration - Import Outlook PST files into Stalwart via JMAP\n")
-		fmt.Fprintf(os.Stderr, "\n")
+	flag.StringVar(
+		&password,
+		"password",
+		"",
+		"Dest. Password",
+	)
 
-		fmt.Fprintf(os.Stderr, "USAGE\n")
-		fmt.Fprintf(os.Stderr, "  pst2jmap-migration [options]\n")
-		fmt.Fprintf(os.Stderr, "\n")
-
-		fmt.Fprintf(os.Stderr, "REQUIRED OPTIONS\n")
-		fmt.Fprintf(os.Stderr, "  --pst         Src. Path to PST file\n")
-		fmt.Fprintf(os.Stderr, "  --url         Dest. JMAP mail server (Stalwart) endpoint\n")
-		fmt.Fprintf(os.Stderr, "  --user        Dest. Username\n")
-		fmt.Fprintf(os.Stderr, "  --password    Dest. Password\n")
-		fmt.Fprintf(os.Stderr, "\n")
-
-		fmt.Fprintf(os.Stderr, "OPTIONAL OPTIONS\n")
-		fmt.Fprintf(os.Stderr, "  --version     Show version\n")
-		fmt.Fprintf(os.Stderr, "  --help        Show help\n")
-		fmt.Fprintf(os.Stderr, "\n")
-
-		fmt.Fprintf(os.Stderr, "EXAMPLES\n")
-		fmt.Fprintf(os.Stderr, "  pst2jmap-migration \\\n")
-		fmt.Fprintf(os.Stderr, "    --pst ./backup.pst \\\n")
-		fmt.Fprintf(os.Stderr, "    --url https://mail.example.com/jmap \\\n")
-		fmt.Fprintf(os.Stderr, "    --user admin@example.com \\\n")
-		fmt.Fprintf(os.Stderr, "    --password secret\n")
-		fmt.Fprintf(os.Stderr, "\n")
-
-		fmt.Fprintf(os.Stderr, "NOTES\n")
-		fmt.Fprintf(os.Stderr, "  • Folder structure is preserved\n")
-		fmt.Fprintf(os.Stderr, "  • Messages are uploaded using JMAP\n")
-		fmt.Fprintf(os.Stderr, "  • PST files are processed incrementally\n")
-		fmt.Fprintf(os.Stderr, "\n")
-	}
+	showVersion := flag.Bool(
+		"version",
+		false,
+		"Show version",
+	)
 
 	flag.Parse()
 
 	if *showVersion {
 		fmt.Println(version)
-		os.Exit(0)
+		return
 	}
 
-	if pstFile == "" {
-		fmt.Fprintln(os.Stderr, "ERROR: missing required option --pst")
-		fmt.Fprintln(os.Stderr)
-		flag.Usage()
-		os.Exit(1)
-	}
+	validate(
+		pstFile,
+		jmapURL,
+		username,
+		password,
+	)
 
-	if jmapURL == "" {
-		fmt.Fprintln(os.Stderr, "ERROR: missing required option --url")
-		fmt.Fprintln(os.Stderr)
-		flag.Usage()
-		os.Exit(1)
-	}
+	ctx := context.Background()
 
-	if username == "" {
-		fmt.Fprintln(os.Stderr, "ERROR: missing required option --user")
-		fmt.Fprintln(os.Stderr)
-		flag.Usage()
-		os.Exit(1)
-	}
+	fmt.Println("Extracting PST...")
 
-	if password == "" {
-		fmt.Fprintln(os.Stderr, "ERROR: missing required option --password")
-		fmt.Fprintln(os.Stderr)
-		flag.Usage()
-		os.Exit(1)
-	}
-
-	reader, err := pstreader.Open(pstFile)
+	reader, err :=
+		pst.NewReader(ctx, pstFile)
 
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "ERROR: failed to open PST file: %v\n", err)
-		os.Exit(1)
+		exit("failed to extract PST", err)
 	}
 
 	defer reader.Close()
 
-	if err := reader.WalkMailboxFolders(); err != nil {
-		fmt.Fprintf(os.Stderr, "ERROR: failed to process PST file: %v\n", err)
-		os.Exit(1)
+	total, err :=
+		pst.CountMessages(reader.OutputDir)
+
+	if err != nil {
+		exit("failed to count messages", err)
 	}
+
+	stats := pst.NewStats(total, startedAt)
+
+	fmt.Printf("Found %d emails\n\n", total)
+
+	fmt.Println("Scanning messages...")
+
+	folderCounts :=
+		map[string]int{}
+
+	currentFolder := ""
+
+	err = reader.Walk(func(path string) error {
+
+		msg, err :=
+			pst.ParseMessage(
+				path,
+			)
+
+		if err != nil {
+
+			stats.IncrementFailed()
+
+			fmt.Printf(
+				"FAILED %s: %v\n",
+				path,
+				err,
+			)
+
+			return nil
+		}
+
+		folder :=
+			msg.Folder
+
+		if folder == "" {
+			folder = "Unknown"
+		}
+
+		if folder != currentFolder {
+
+			currentFolder =
+				folder
+
+			fmt.Println()
+
+			fmt.Printf(
+				"=== Folder: %s ===\n",
+				folder,
+			)
+		}
+
+		folderCounts[folder]++
+
+		stats.IncrementImported()
+
+		subject :=
+			msg.Subject
+
+		if subject == "" {
+			subject =
+				"(no subject)"
+		}
+
+		fmt.Printf(
+			"[%d/%d] (%s #%d) %s\n",
+			stats.Processed,
+			stats.TotalMessages,
+			folder,
+			folderCounts[folder],
+			subject,
+		)
+
+		return nil
+	},
+	)
+
+	if err != nil {
+		exit(
+			"migration failed",
+			err,
+		)
+	}
+
+	stats.Finish()
+
+	fmt.Println()
+	fmt.Println("Folder summary:")
+
+	for folder, count := range folderCounts {
+
+		fmt.Printf(
+			"  %-15s %d\n",
+			folder,
+			count,
+		)
+	}
+
+	fmt.Println()
+	fmt.Println(stats)
+
+	// TODO: use later
+	_ = jmapURL
+	_ = username
+	_ = password
+}
+
+func validate(
+	pstFile string,
+	jmapURL string,
+	user string,
+	pass string,
+) {
+
+	required := map[string]string{
+		"--pst":      pstFile,
+		"--url":      jmapURL,
+		"--user":     user,
+		"--password": pass,
+	}
+
+	for k, v := range required {
+
+		if v == "" {
+
+			fmt.Fprintf(
+				os.Stderr,
+				"ERROR: missing required option %s\n",
+				k,
+			)
+
+			os.Exit(1)
+		}
+	}
+}
+
+func exit(
+	msg string,
+	err error,
+) {
+
+	fmt.Fprintf(
+		os.Stderr,
+		"ERROR: %s: %v\n",
+		msg,
+		err,
+	)
+
+	os.Exit(1)
 }

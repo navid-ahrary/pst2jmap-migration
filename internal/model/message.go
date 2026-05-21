@@ -7,8 +7,7 @@ type Message struct {
 
 	Subject string
 
-	FromName  string
-	FromEmail string
+	From string
 
 	To  []string
 	CC  []string

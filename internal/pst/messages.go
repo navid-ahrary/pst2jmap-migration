@@ -1,54 +1,146 @@
-package pstreader
+package pst
 
 import (
-	"fmt"
-	"time"
-
-	pst "github.com/mooijtech/go-pst/v6/pkg"
-	"github.com/mooijtech/go-pst/v6/pkg/properties"
+	"io"
+	"mime"
+	"net/mail"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/navid/pst2jmap-migration/internal/model"
+	"golang.org/x/net/html/charset"
 )
 
-func ExtractMessage(
-	folder *pst.Folder,
-	message *pst.Message,
+func ParseMessage(
+	path string,
 ) (*model.Message, error) {
 
-	msg, ok := message.Properties.(*properties.Message)
+	f, err :=
+		os.Open(path)
 
-	// fmt.Println(msg)
-	// if IgnoredMessageClasses[*msg.ContentType] {
-	// 	return nil, nil
-	// }
-
-	if !ok {
-		return nil, fmt.Errorf("unsupported message type")
+	if err != nil {
+		return nil, err
 	}
 
-	var date time.Time
+	defer f.Close()
 
-	if msg.ClientSubmitTime != nil {
-		date = time.Unix(0, *msg.ClientSubmitTime)
+	msg, err :=
+		mail.ReadMessage(
+			f,
+		)
+
+	if err != nil {
+		return nil, err
 	}
 
-	out := &model.Message{
-		Folder: folder.Name,
+	subject :=
+		decodeHeader(
+			msg.Header.Get(
+				"Subject",
+			),
+		)
 
-		Subject: msg.GetSubject(),
+	from :=
+		msg.Header.Get(
+			"From",
+		)
 
-		FromName: msg.GetSenderName(),
+	messageID :=
+		msg.Header.Get(
+			"Message-ID",
+		)
 
-		FromEmail: extractSenderEmail(msg),
+	return &model.Message{
+		Subject:   subject,
+		From:      from,
+		MessageID: messageID,
+		Folder: mailboxFromPath(
+			path,
+		),
+	}, nil
+}
 
-		MessageID: *msg.InternetMessageId,
+func decodeHeader(
+	value string,
+) string {
 
-		Headers: msg.GetTransportMessageHeaders(),
-
-		Body: msg.GetBody(),
-
-		Date: date,
+	if value == "" {
+		return ""
 	}
 
-	return out, nil
+	decoder :=
+		mime.WordDecoder{
+			CharsetReader: func(
+				charsetName string,
+				input io.Reader,
+			) (io.Reader, error) {
+
+				return charset.
+					NewReaderLabel(
+						charsetName,
+						input,
+					)
+			},
+		}
+
+	decoded, err :=
+		decoder.DecodeHeader(
+			value,
+		)
+
+	if err != nil {
+		return strings.TrimSpace(
+			value,
+		)
+	}
+
+	return decoded
+}
+
+func mailboxFromPath(path string) string {
+
+	dir := filepath.Dir(path)
+
+	for {
+
+		name := filepath.Base(dir)
+
+		switch name {
+
+		case "Inbox":
+			return "Inbox"
+
+		case "Sent-Items":
+			return "Sent-Items"
+
+		case "Sent Items":
+			return "Sent Items"
+
+		case "Deleted-Items":
+			return "Deleted-Items"
+
+		case "Deleted Items":
+			return "Deleted Items"
+
+		case "Drafts":
+			return "Drafts"
+
+		case "Junk-Email":
+			return "Junk-Email"
+
+		case "Junk Email":
+			return "Junk Email"
+		}
+
+		parent := filepath.Dir(dir)
+
+		if parent == dir {
+			break
+		}
+
+		dir = parent
+	}
+
+	return "Unknown"
 }

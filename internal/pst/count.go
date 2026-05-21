@@ -1,63 +1,55 @@
-package pstreader
+package pst
 
 import (
-	pst "github.com/mooijtech/go-pst/v6/pkg"
-	"github.com/rotisserie/eris"
+	"os"
+	"path/filepath"
 )
 
-func (r *Reader) CountMessages() (
-	[]FolderStats,
-	int,
-	error,
-) {
+func CountMessages(root string) (int, error) {
+	total := 0
 
-	allowedFolders := map[string]bool{
-		"Inbox":         true,
-		"Sent Items":    true,
-		"Sent-Items":    true,
-		"Drafts":        true,
-		"Deleted Items": true,
-		"Deleted-Items": true,
-		"Junk Email":    true,
-		"Junk-Email":    true,
-	}
-
-	var (
-		total int
-		stats []FolderStats
-	)
-
-	err := r.file.WalkFolders(func(folder *pst.Folder) error {
-
-		if !allowedFolders[folder.Name] {
-			return nil
-		}
-
-		messageIterator, err := folder.GetMessageIterator()
-
-		if eris.Is(err, pst.ErrMessagesNotFound) {
-			return nil
-		}
+	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 
 		if err != nil {
 			return err
 		}
 
-		count := 0
-
-		for messageIterator.Next() {
-			count++
+		if info == nil {
+			return nil
 		}
 
-		stats = append(stats, FolderStats{
-			Name:  folder.Name,
-			Count: count,
-		})
+		if info.IsDir() {
+			return nil
+		}
 
-		total += count
+		if info.Size() == 0 {
+			return nil
+		}
 
-		return messageIterator.Err()
-	})
+		if filepath.Ext(path) != ".eml" {
+			return nil
+		}
 
-	return stats, total, err
+		name :=
+			filepath.Base(path)
+
+		if name == ".DS_Store" ||
+			name == "index" ||
+			name == "desc" {
+			return nil
+		}
+
+		if !isAllowedFolder(
+			path,
+		) {
+			return nil
+		}
+
+		total++
+
+		return nil
+	},
+	)
+
+	return total, err
 }

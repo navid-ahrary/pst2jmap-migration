@@ -1,146 +1,181 @@
-package pstreader
+package pst
 
 import (
-	"fmt"
+	"context"
 	"os"
-
-	charsets "github.com/emersion/go-message/charset"
-
-	pst "github.com/mooijtech/go-pst/v6/pkg"
-	"github.com/rotisserie/eris"
-	"golang.org/x/text/encoding"
+	"os/exec"
+	"path/filepath"
 )
 
 type Reader struct {
-	file   *pst.File
-	reader *os.File
+	OutputDir string
 }
 
-func Open(path string) (*Reader, error) {
+var allowedFolders = map[string]bool{
+	"Inbox": true,
 
-	// Register charset support
-	pst.ExtendCharsets(func(name string, enc encoding.Encoding) {
-		charsets.RegisterEncoding(name, enc)
-	})
+	"Sent-Items": true,
+	"Sent Items": true,
 
-	reader, err := os.Open(path)
+	"Deleted-Items": true,
+	"Deleted Items": true,
+
+	"Drafts": true,
+
+	"Junk-Email": true,
+	"Junk Email": true,
+}
+
+func NewReader(
+	ctx context.Context,
+	pstFile string,
+) (*Reader, error) {
+
+	outputDir, err :=
+		os.MkdirTemp(
+			"",
+			"pst2jmap-*",
+		)
 
 	if err != nil {
 		return nil, err
 	}
 
-	pstFile, err := pst.New(reader)
+	err =
+		ExtractPST(
+			ctx,
+			pstFile,
+			outputDir,
+		)
 
 	if err != nil {
+
+		_ =
+			os.RemoveAll(
+				outputDir,
+			)
+
 		return nil, err
 	}
 
 	return &Reader{
-		file:   pstFile,
-		reader: reader,
+		OutputDir: outputDir,
 	}, nil
+}
+
+func ExtractPST(
+	ctx context.Context,
+	pstFile string,
+	outputDir string,
+) error {
+
+	cmd :=
+		exec.CommandContext(
+			ctx,
+			"readpst",
+			"-D",
+			"-b",
+			"-e",
+			"-o",
+			outputDir,
+			pstFile,
+		)
+
+	cmd.Stdout =
+		os.Stdout
+
+	cmd.Stderr =
+		os.Stderr
+
+	return cmd.Run()
+}
+
+func (r *Reader) Walk(
+	fn func(
+		string,
+	) error,
+) error {
+
+	return filepath.Walk(
+		r.OutputDir,
+
+		func(
+			path string,
+			info os.FileInfo,
+			err error,
+		) error {
+
+			if err != nil {
+				return err
+			}
+
+			if info == nil {
+				return nil
+			}
+
+			if info.IsDir() {
+				return nil
+			}
+
+			if info.Size() == 0 {
+				return nil
+			}
+
+			if filepath.Ext(path) != ".eml" {
+
+				return nil
+			}
+
+			if !isAllowedFolder(path) {
+
+				return nil
+			}
+
+			return fn(path)
+		},
+	)
 }
 
 func (r *Reader) Close() error {
 
-	r.file.Cleanup()
-
-	return r.reader.Close()
+	return os.RemoveAll(
+		r.OutputDir,
+	)
 }
 
-func (r *Reader) WalkMailboxFolders() error {
+func isAllowedFolder(
+	path string,
+) bool {
 
-	allowedFolders := map[string]bool{
-		"Inbox":         true,
-		"Sent Items":    true,
-		"Sent-Items":    true,
-		"Drafts":        true,
-		"Deleted Items": true,
-		"Deleted-Items": true,
-		"Junk Email":    true,
-		"Junk-Email":    true,
-	}
-
-	var processed int
-
-	err := r.file.WalkFolders(func(folder *pst.Folder) error {
-
-		if !allowedFolders[folder.Name] {
-			return nil
-		}
-
-		fmt.Printf("\nFolder: %s\n", folder.Name)
-
-		messageIterator, err := folder.GetMessageIterator()
-
-		if eris.Is(err, pst.ErrMessagesNotFound) {
-			return nil
-		}
-
-		if err != nil {
-			return err
-		}
-
-		var folderProcessed int
-
-		for messageIterator.Next() {
-
-			message := messageIterator.Value()
-
-			// Convert PST message -> internal model
-			msg, err := ExtractMessage(folder, message)
-
-			if err != nil {
-				fmt.Printf(
-					"Failed to extract message: %v\n",
-					err,
-				)
-				continue
-			}
-
-			if msg == nil {
-				continue
-			}
-
-			processed++
-			folderProcessed++
-
-			// TODO:
-			// Future migration step:
-			//
-			// err = migrateMessage(msg)
-			// if err != nil {
-			//     ...
-			// }
-
-			_ = msg
-
-			// Print progress every 100 messages
-			if processed%100 == 0 {
-
-				fmt.Printf(
-					"\rProcessed: %d",
-					processed,
-				)
-			}
-		}
-
-		fmt.Printf(
-			"\nFolder completed: %d messages\n",
-			folderProcessed,
+	dir :=
+		filepath.Dir(
+			path,
 		)
 
-		return messageIterator.Err()
-	})
+	for {
 
-	if err != nil {
-		return err
+		name :=
+			filepath.Base(
+				dir,
+			)
+
+		if allowedFolders[name] {
+
+			return true
+		}
+
+		parent :=
+			filepath.Dir(
+				dir,
+			)
+
+		if parent == dir {
+			break
+		}
+
+		dir =
+			parent
 	}
 
-	fmt.Printf(
-		"\n\nCompleted. Total processed: %d\n",
-		processed,
-	)
-
-	return nil
+	return false
 }

@@ -1,156 +1,168 @@
 # pst2jmap-migration
 
-A lightweight Go command-line utility for migrating Outlook PST mailboxes into JMAP mail servers such as Stalwart Mail Server.
+CLI tool for migrating Microsoft Outlook `.pst` archives into JMAP mail servers such as Stalwart Mail Server.
 
-The project uses:
+The migration pipeline is optimized for large mailbox imports and uses offline PST extraction to improve performance and reliability.
 
-- go-pst for PST parsing
-- JMAP for modern high-performance mailbox import
-- Incremental PST processing for large mailboxes
+---
+
+## Architecture
+
+```text
+PST
+ ↓
+readpst
+ ↓
+EML extraction
+ ↓
+Go migration engine
+ ↓
+JMAP Upload
+ ↓
+Email/import
+ ↓
+Stalwart mailbox
+```
 
 ---
 
 ## Features
 
-- Parse Outlook `.pst` files
-- Read mailbox folders
-- Filter Outlook system folders
-- Incremental processing for large PST files
-- Lightweight standalone binary
-- Cross-platform builds
-- JMAP-based migration architecture
-- Designed for Stalwart Mail Server compatibility
+Current:
 
----
-
-## Current Status
-
-Current implementation supports:
-
-- PST parsing
-- Mailbox folder discovery
-- Folder filtering
-- CLI tooling
+- Offline PST extraction using `readpst`
+- Recursive mailbox folder discovery
+- EML-based processing
+- Lightweight Go CLI
+- Large mailbox support
+- Folder hierarchy preservation
 
 Planned:
 
-- MIME extraction
-- Attachment handling
 - JMAP authentication
-- Mailbox creation
-- Email upload/import
-- Parallel migration workers
-- Resume support
-
----
-
-## Supported Mailbox Folders
-
-The tool currently processes mailbox folders under:
-
-```text
-Top-of-Information-Store
-```
-
-Typical folders:
-
-- Inbox
-- Sent Items
-- Deleted Items
-- Junk Email
-- Drafts
-
-Outlook internal/system folders are ignored.
+- Blob upload
+- Email/import
+- Attachment migration
+- Parallel uploads
+- Resume/retry
+- Progress reporting
+- Migration validation
 
 ---
 
 ## Requirements
 
+### Runtime
+
+- Linux
 - Go 1.22+
-- Outlook PST file
-- JMAP-compatible mail server
+- `readpst`
 
-Tested against:
+Install:
 
-- Microsoft Outlook PST exports
-- Exchange Online PSTs
-- Microsoft 365 mailboxes
+Ubuntu:
+
+```bash
+sudo apt install pst-utils
+```
+
+RHEL:
+
+```bash
+sudo dnf install libpst
+```
+
+Verify:
+
+```bash
+readpst -V
+```
 
 ---
 
 ## Build
 
-### Linux AMD64
-
 ```bash
-GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build \
-  -trimpath \
-  -ldflags="-s -w" \
-  -o pst2jmap-migration-linux-amd64
+go build -o pst2jmap
 ```
 
-### Linux ARM64
+Release:
 
 ```bash
-GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build \
-  -trimpath \
-  -ldflags="-s -w" \
-  -o pst2jmap-migration-linux-arm64
-```
-
-### Windows AMD64
-
-```bash
-GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build \
-  -trimpath \
-  -ldflags="-s -w" \
-  -o pst2jmap-migration-windows-amd64.exe
+CGO_ENABLED=0 \
+go build \
+-trimpath \
+-ldflags="-s -w"
 ```
 
 ---
 
 ## Usage
 
+Extract and migrate:
+
 ```bash
-pst2jmap-migration \
-  --pst ./backup.pst \
-  --url https://mail.example.com/jmap \
-  --user admin@example.com \
-  --password secret
+pst2jmap \
+--pst backup.pst \
+--server https://mail.example.com/jmap \
+--user admin@example.com \
+--password secret
 ```
 
 ---
 
-## CLI Options
+## Migration Flow
 
-| Option | Description |
-|---|---|
-| `--pst` | Source PST file |
-| `--url` | Destination JMAP endpoint |
-| `--user` | Destination mailbox username |
-| `--password` | Destination mailbox password |
-| `--version` | Show version |
+### 1. Extract PST
 
----
+```bash
+readpst \
+-r \
+-e \
+-u \
+-o ./output \
+backup.pst
+```
 
-## Example Output
+Output:
 
 ```text
-Folder: Inbox
-Messages: 2369
-
-Folder: Sent Items
-Messages: 554
-
-Folder: Deleted Items
-Messages: 61
-
-Folder: Junk Email
-Messages: 20
-
-Folder: Drafts
-Messages: 5
+output/
+├── Inbox/
+├── Sent Items/
+├── Deleted Items/
+└── Drafts/
 ```
+
+---
+
+### 2. Import
+
+CLI scans extracted `.eml` files.
+
+For each message:
+
+```text
+EML
+ ↓
+Upload
+ ↓
+blobId
+ ↓
+Email/import
+```
+
+---
+
+## Folder Mapping
+
+| Outlook | JMAP |
+|---|---|
+| Inbox | Inbox |
+| Sent Items | Sent |
+| Deleted Items | Trash |
+| Drafts | Drafts |
+| Junk Email | Junk |
 
 ---
 
@@ -158,44 +170,65 @@ Messages: 5
 
 ```text
 internal/
+├── jmap/
+├── model/
+│   └── message.go
+│
 ├── pst/
 │   ├── reader.go
-│   ├── filters.go
-│   └── folders.go
-│
-├── jmap/
-│
-├── migrate/
-│
-└── model/
+│   ├── messages.go
+│   ├── stats.go
+│   └── count.go
 
 main.go
+README.md
 ```
 
 ---
 
-## Development Roadmap
+## Test Data
 
-- [x] PST parsing
-- [x] Folder filtering
-- [x] CLI implementation
-- [ ] MIME extraction
-- [ ] RFC822 generation
-- [ ] JMAP authentication
-- [ ] Blob upload
-- [ ] Email/import support
-- [ ] Attachment migration
-- [ ] Parallel uploads
-- [ ] Resume/retry support
-- [ ] Progress reporting
+```text
+testdata/
+├── backup_150mb.pst
+└── backup_1GB.pst
+```
 
 ---
 
-## Important Notes
+## Roadmap
 
-This project intentionally focuses on mailbox migration only.
+### Extraction
 
-The following Outlook object types are currently ignored:
+- [ ] Replace go-pst with readpst
+- [ ] Recursive extraction
+- [ ] Folder normalization
+
+### Migration
+
+- [ ] Upload blobs
+- [ ] Email/import
+- [ ] Mailbox creation
+- [ ] Keyword mapping
+
+### Reliability
+
+- [ ] Resume support
+- [ ] Checkpoints
+- [ ] Retry
+- [ ] Validation
+
+### Performance
+
+- [ ] Parallel upload workers
+- [ ] Streaming imports
+- [ ] Memory limits
+
+---
+
+## Non-goals
+
+Not migrating:
 
 - Calendar
 - Contacts
@@ -203,14 +236,6 @@ The following Outlook object types are currently ignored:
 - Teams metadata
 - Search folders
 - Outlook application data
-- Sync issue folders
-
----
-
-## Dependencies
-
-- <https://github.com/mooijtech/go-pst>
-- <https://github.com/emersion/go-message>
 
 ---
 
