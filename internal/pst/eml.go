@@ -7,9 +7,7 @@ import (
 	"github.com/navid/pst2jmap-migration/internal/model"
 )
 
-func ParseEML(
-	path string,
-) (*model.Message, error) {
+func ParseEML(path string) (*model.Message, error) {
 
 	f, err := os.Open(path)
 

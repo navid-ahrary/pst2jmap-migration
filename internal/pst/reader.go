@@ -99,11 +99,7 @@ func (r *Reader) Walk(
 	return filepath.Walk(
 		r.OutputDir,
 
-		func(
-			path string,
-			info os.FileInfo,
-			err error,
-		) error {
+		func(path string, info os.FileInfo, err error) error {
 
 			if err != nil {
 				return err
@@ -137,44 +133,28 @@ func (r *Reader) Walk(
 }
 
 func (r *Reader) Close() error {
-
-	return os.RemoveAll(
-		r.OutputDir,
-	)
+	return os.RemoveAll(r.OutputDir)
 }
 
-func isAllowedFolder(
-	path string,
-) bool {
+func isAllowedFolder(path string) bool {
 
-	dir :=
-		filepath.Dir(
-			path,
-		)
+	dir := filepath.Dir(path)
 
 	for {
 
-		name :=
-			filepath.Base(
-				dir,
-			)
+		name := filepath.Base(dir)
 
 		if allowedFolders[name] {
-
 			return true
 		}
 
-		parent :=
-			filepath.Dir(
-				dir,
-			)
+		parent := filepath.Dir(dir)
 
 		if parent == dir {
 			break
 		}
 
-		dir =
-			parent
+		dir = parent
 	}
 
 	return false

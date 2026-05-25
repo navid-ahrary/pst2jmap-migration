@@ -74,8 +74,7 @@ func main() {
 
 	fmt.Println("Extracting PST...")
 
-	reader, err :=
-		pst.NewReader(ctx, pstFile)
+	reader, err := pst.NewReader(ctx, pstFile)
 
 	if err != nil {
 		exit("failed to extract PST", err)
@@ -83,8 +82,7 @@ func main() {
 
 	defer reader.Close()
 
-	total, err :=
-		pst.CountMessages(reader.OutputDir)
+	total, err := pst.CountMessages(reader.OutputDir)
 
 	if err != nil {
 		exit("failed to count messages", err)
@@ -96,81 +94,64 @@ func main() {
 
 	fmt.Println("Scanning messages...")
 
-	folderCounts :=
-		map[string]int{}
+	folderCounts := map[string]int{}
 
 	currentFolder := ""
 
-	err = reader.Walk(func(path string) error {
+	err = reader.Walk(
+		func(path string) error {
 
-		msg, err :=
-			pst.ParseMessage(
-				path,
-			)
+			msg, err := pst.ParseMessage(path)
 
-		if err != nil {
+			if err != nil {
 
-			stats.IncrementFailed()
+				stats.IncrementFailed()
+
+				fmt.Printf("FAILED %s: %v\n", path, err)
+
+				return nil
+			}
+
+			folder := msg.Folder
+
+			if folder == "" {
+				folder = "Unknown"
+			}
+
+			if folder != currentFolder {
+
+				currentFolder = folder
+
+				fmt.Println()
+
+				fmt.Printf("=== Folder: %s ===\n", folder)
+			}
+
+			folderCounts[folder]++
+
+			stats.IncrementImported()
+
+			subject := msg.Subject
+
+			if subject == "" {
+				subject = "(no subject)"
+			}
 
 			fmt.Printf(
-				"FAILED %s: %v\n",
-				path,
-				err,
+				"[%d/%d] (%s #%d) %s\n",
+				stats.Processed,
+				stats.TotalMessages,
+				folder,
+				folderCounts[folder],
+				subject,
 			)
 
 			return nil
-		}
-
-		folder :=
-			msg.Folder
-
-		if folder == "" {
-			folder = "Unknown"
-		}
-
-		if folder != currentFolder {
-
-			currentFolder =
-				folder
-
-			fmt.Println()
-
-			fmt.Printf(
-				"=== Folder: %s ===\n",
-				folder,
-			)
-		}
-
-		folderCounts[folder]++
-
-		stats.IncrementImported()
-
-		subject :=
-			msg.Subject
-
-		if subject == "" {
-			subject =
-				"(no subject)"
-		}
-
-		fmt.Printf(
-			"[%d/%d] (%s #%d) %s\n",
-			stats.Processed,
-			stats.TotalMessages,
-			folder,
-			folderCounts[folder],
-			subject,
-		)
-
-		return nil
-	},
+		},
 	)
 
 	if err != nil {
-		exit(
-			"migration failed",
-			err,
-		)
+		exit("migration failed", err)
 	}
 
 	stats.Finish()
@@ -179,12 +160,7 @@ func main() {
 	fmt.Println("Folder summary:")
 
 	for folder, count := range folderCounts {
-
-		fmt.Printf(
-			"  %-15s %d\n",
-			folder,
-			count,
-		)
+		fmt.Printf("  %-15s %d\n", folder, count)
 	}
 
 	fmt.Println()
@@ -196,12 +172,7 @@ func main() {
 	_ = password
 }
 
-func validate(
-	pstFile string,
-	jmapURL string,
-	user string,
-	pass string,
-) {
+func validate(pstFile string, jmapURL string, user string, pass string) {
 
 	required := map[string]string{
 		"--pst":      pstFile,
@@ -211,31 +182,14 @@ func validate(
 	}
 
 	for k, v := range required {
-
 		if v == "" {
-
-			fmt.Fprintf(
-				os.Stderr,
-				"ERROR: missing required option %s\n",
-				k,
-			)
-
+			fmt.Fprintf(os.Stderr, "ERROR: missing required option %s\n", k)
 			os.Exit(1)
 		}
 	}
 }
 
-func exit(
-	msg string,
-	err error,
-) {
-
-	fmt.Fprintf(
-		os.Stderr,
-		"ERROR: %s: %v\n",
-		msg,
-		err,
-	)
-
+func exit(msg string, err error) {
+	fmt.Fprintf(os.Stderr, "ERROR: %s: %v\n", msg, err)
 	os.Exit(1)
 }

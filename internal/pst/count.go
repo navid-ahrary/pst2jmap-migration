@@ -39,9 +39,7 @@ func CountMessages(root string) (int, error) {
 			return nil
 		}
 
-		if !isAllowedFolder(
-			path,
-		) {
+		if !isAllowedFolder(path) {
 			return nil
 		}
 

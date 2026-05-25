@@ -12,9 +12,7 @@ import (
 	"golang.org/x/net/html/charset"
 )
 
-func ParseMessage(
-	path string,
-) (*model.Message, error) {
+func ParseMessage(path string) (*model.Message, error) {
 
 	f, err :=
 		os.Open(path)
@@ -25,74 +23,42 @@ func ParseMessage(
 
 	defer f.Close()
 
-	msg, err :=
-		mail.ReadMessage(
-			f,
-		)
+	msg, err := mail.ReadMessage(f)
 
 	if err != nil {
 		return nil, err
 	}
 
-	subject :=
-		decodeHeader(
-			msg.Header.Get(
-				"Subject",
-			),
-		)
+	subject := decodeHeader(msg.Header.Get("Subject"))
 
-	from :=
-		msg.Header.Get(
-			"From",
-		)
+	from := msg.Header.Get("From")
 
-	messageID :=
-		msg.Header.Get(
-			"Message-ID",
-		)
+	messageID := msg.Header.Get("Message-ID")
 
 	return &model.Message{
 		Subject:   subject,
 		From:      from,
 		MessageID: messageID,
-		Folder: mailboxFromPath(
-			path,
-		),
+		Folder:    mailboxFromPath(path),
 	}, nil
 }
 
-func decodeHeader(
-	value string,
-) string {
+func decodeHeader(value string) string {
 
 	if value == "" {
 		return ""
 	}
 
-	decoder :=
-		mime.WordDecoder{
-			CharsetReader: func(
-				charsetName string,
-				input io.Reader,
-			) (io.Reader, error) {
+	decoder := mime.WordDecoder{
+		CharsetReader: func(charsetName string, input io.Reader) (io.Reader, error) {
+			return charset.NewReaderLabel(charsetName, input)
+		},
+	}
 
-				return charset.
-					NewReaderLabel(
-						charsetName,
-						input,
-					)
-			},
-		}
-
-	decoded, err :=
-		decoder.DecodeHeader(
-			value,
-		)
+	decoded, err := decoder.DecodeHeader(value)
 
 	if err != nil {
-		return strings.TrimSpace(
-			value,
-		)
+		return strings.TrimSpace(value)
 	}
 
 	return decoded
