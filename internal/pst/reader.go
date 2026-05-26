@@ -26,79 +26,44 @@ var allowedFolders = map[string]bool{
 	"Junk Email": true,
 }
 
-func NewReader(
-	ctx context.Context,
-	pstFile string,
-) (*Reader, error) {
-
-	outputDir, err :=
-		os.MkdirTemp(
-			"",
-			"pst2jmap-*",
-		)
+func NewReader(ctx context.Context, pstFile string) (*Reader, error) {
+	outputDir, err := os.MkdirTemp("", "pst2jmap-*")
 
 	if err != nil {
 		return nil, err
 	}
 
-	err =
-		ExtractPST(
-			ctx,
-			pstFile,
-			outputDir,
-		)
+	err = ExtractPST(ctx, pstFile, outputDir)
 
 	if err != nil {
-
-		_ =
-			os.RemoveAll(
-				outputDir,
-			)
-
+		_ = os.RemoveAll(outputDir)
 		return nil, err
 	}
 
-	return &Reader{
-		OutputDir: outputDir,
-	}, nil
+	return &Reader{OutputDir: outputDir}, nil
 }
 
-func ExtractPST(
-	ctx context.Context,
-	pstFile string,
-	outputDir string,
-) error {
+func ExtractPST(ctx context.Context, pstFile string, outputDir string) error {
 
-	cmd :=
-		exec.CommandContext(
-			ctx,
-			"readpst",
-			"-D",
-			"-b",
-			"-e",
-			"-o",
-			outputDir,
-			pstFile,
-		)
+	cmd := exec.CommandContext(
+		ctx,
+		ReadPSTBinary(),
+		"-D",
+		"-b",
+		"-e",
+		"-o",
+		outputDir,
+		pstFile,
+	)
 
-	cmd.Stdout =
-		os.Stdout
-
-	cmd.Stderr =
-		os.Stderr
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
 
 	return cmd.Run()
 }
 
-func (r *Reader) Walk(
-	fn func(
-		string,
-	) error,
-) error {
-
-	return filepath.Walk(
-		r.OutputDir,
-
+func (r *Reader) Walk(fn func(string) error) error {
+	return filepath.Walk(r.OutputDir,
 		func(path string, info os.FileInfo, err error) error {
 
 			if err != nil {
@@ -118,12 +83,10 @@ func (r *Reader) Walk(
 			}
 
 			if filepath.Ext(path) != ".eml" {
-
 				return nil
 			}
 
 			if !isAllowedFolder(path) {
-
 				return nil
 			}
 
@@ -137,11 +100,9 @@ func (r *Reader) Close() error {
 }
 
 func isAllowedFolder(path string) bool {
-
 	dir := filepath.Dir(path)
 
 	for {
-
 		name := filepath.Base(dir)
 
 		if allowedFolders[name] {
