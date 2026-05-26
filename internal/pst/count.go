@@ -6,6 +6,7 @@ import (
 )
 
 func CountMessages(root string) (int, error) {
+
 	total := 0
 
 	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
@@ -30,8 +31,7 @@ func CountMessages(root string) (int, error) {
 			return nil
 		}
 
-		name :=
-			filepath.Base(path)
+		name := filepath.Base(path)
 
 		if name == ".DS_Store" ||
 			name == "index" ||

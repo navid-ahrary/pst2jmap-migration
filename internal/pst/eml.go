@@ -8,9 +8,7 @@ import (
 )
 
 func ParseEML(path string) (*model.Message, error) {
-
 	f, err := os.Open(path)
-
 	if err != nil {
 		return nil, err
 	}
