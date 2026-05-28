@@ -5,19 +5,21 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
+	"github.com/navid/pst2jmap-migration/internal/jmap"
 	"github.com/navid/pst2jmap-migration/internal/pst"
 )
+
+const JMAP_URL string = "https://postmaster.collab24.net/jmap"
 
 var version = "dev"
 
 func main() {
 	startedAt := time.Now()
-
 	var (
 		pstFile  string
-		jmapURL  string
 		username string
 		password string
 	)
@@ -27,13 +29,6 @@ func main() {
 		"pst",
 		"",
 		"Src. Path to PST file",
-	)
-
-	flag.StringVar(
-		&jmapURL,
-		"url",
-		"",
-		"Dest. JMAP endpoint",
 	)
 
 	flag.StringVar(
@@ -50,11 +45,7 @@ func main() {
 		"Dest. Password",
 	)
 
-	showVersion := flag.Bool(
-		"version",
-		false,
-		"Show version",
-	)
+	showVersion := flag.Bool("version", false, "Show version")
 
 	flag.Parse()
 
@@ -65,7 +56,6 @@ func main() {
 
 	validate(
 		pstFile,
-		jmapURL,
 		username,
 		password,
 	)
@@ -82,6 +72,34 @@ func main() {
 
 	defer reader.Close()
 
+	client := jmap.NewClient(
+		JMAP_URL,
+		username,
+		password,
+	)
+
+	err = client.Connect()
+
+	if err != nil {
+		exit(
+			"failed to connect jmap",
+			err,
+		)
+	}
+
+	inboxID, err := client.GetInboxID()
+	if err != nil {
+		exit(
+			"failed to get inbox",
+			err,
+		)
+	}
+
+	fmt.Println(
+		"Inbox mailbox:",
+		inboxID,
+	)
+
 	total, err := pst.CountMessages(reader.OutputDir)
 
 	if err != nil {
@@ -96,59 +114,117 @@ func main() {
 
 	folderCounts := map[string]int{}
 
-	currentFolder := ""
+	imported := false
 
 	err = reader.Walk(
 		func(path string) error {
 
-			msg, err := pst.ParseMessage(path)
+			if imported {
+				return filepath.SkipAll
+			}
+
+			fmt.Println()
+			fmt.Println(
+				"Testing EML:",
+				path,
+			)
+
+			blobID, err :=
+				client.UploadEML(
+					path,
+				)
 
 			if err != nil {
 
-				stats.IncrementFailed()
-
-				fmt.Printf("FAILED %s: %v\n", path, err)
+				fmt.Println(
+					"UPLOAD FAILED:",
+					err,
+				)
 
 				return nil
 			}
 
-			folder := msg.Folder
-
-			if folder == "" {
-				folder = "Unknown"
-			}
-
-			if folder != currentFolder {
-
-				currentFolder = folder
-
-				fmt.Println()
-
-				fmt.Printf("=== Folder: %s ===\n", folder)
-			}
-
-			folderCounts[folder]++
-
-			stats.IncrementImported()
-
-			subject := msg.Subject
-
-			if subject == "" {
-				subject = "(no subject)"
-			}
-
-			fmt.Printf(
-				"[%d/%d] (%s #%d) %s\n",
-				stats.Processed,
-				stats.TotalMessages,
-				folder,
-				folderCounts[folder],
-				subject,
+			fmt.Println(
+				"Uploaded blob:",
+				blobID,
 			)
 
-			return nil
+			err =
+				client.ImportEmail(
+					blobID,
+					inboxID,
+				)
+
+			if err != nil {
+
+				fmt.Println(
+					"IMPORT FAILED:",
+					err,
+				)
+
+				return nil
+			}
+
+			fmt.Println(
+				"Email imported successfully",
+			)
+
+			imported = true
+
+			return filepath.SkipAll
 		},
 	)
+
+	// currentFolder := ""
+
+	// err = reader.Walk(
+	// 	func(path string) error {
+
+	// 		msg, err := pst.ParseMessage(path)
+
+	// 		if err != nil {
+	// 			stats.IncrementFailed()
+	// 			fmt.Printf("FAILED %s: %v\n", path, err)
+	// 			return nil
+	// 		}
+
+	// 		folder := msg.Folder
+
+	// 		if folder == "" {
+	// 			folder = "Unknown"
+	// 		}
+
+	// 		if folder != currentFolder {
+
+	// 			currentFolder = folder
+
+	// 			fmt.Println()
+
+	// 			fmt.Printf("=== Folder: %s ===\n", folder)
+	// 		}
+
+	// 		folderCounts[folder]++
+
+	// 		stats.IncrementImported()
+
+	// 		subject := msg.Subject
+
+	// 		if subject == "" {
+	// 			subject = "(no subject)"
+	// 		}
+
+	// 		fmt.Printf(
+	// 			"[%d/%d] (%s #%d) %s\n",
+	// 			stats.Processed,
+	// 			stats.TotalMessages,
+	// 			folder,
+	// 			folderCounts[folder],
+	// 			subject,
+	// 		)
+
+	// 		return nil
+	// 	},
+	// )
 
 	if err != nil {
 		exit("migration failed", err)
@@ -166,17 +242,12 @@ func main() {
 	fmt.Println()
 	fmt.Println(stats)
 
-	// TODO: use later
-	_ = jmapURL
-	_ = username
-	_ = password
 }
 
-func validate(pstFile string, jmapURL string, user string, pass string) {
+func validate(pstFile string, user string, pass string) {
 
 	required := map[string]string{
 		"--pst":      pstFile,
-		"--url":      jmapURL,
 		"--user":     user,
 		"--password": pass,
 	}

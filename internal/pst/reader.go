@@ -27,8 +27,15 @@ var allowedFolders = map[string]bool{
 }
 
 func NewReader(ctx context.Context, pstFile string) (*Reader, error) {
-	outputDir, err := os.MkdirTemp("", "pst2jmap-*")
+	outputDir := "output"
 
+	// cleanup old extraction
+	_ = os.RemoveAll(outputDir)
+
+	err := os.MkdirAll(
+		outputDir,
+		0755,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -96,7 +103,7 @@ func (r *Reader) Walk(fn func(string) error) error {
 }
 
 func (r *Reader) Close() error {
-	return os.RemoveAll(r.OutputDir)
+	return nil
 }
 
 func isAllowedFolder(path string) bool {
