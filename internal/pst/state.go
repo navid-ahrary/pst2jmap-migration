@@ -9,13 +9,15 @@ import (
 type MigrationState struct {
 	mu sync.Mutex
 
-	Processed map[string]bool `json:"processed"`
+	Processed  map[string]bool `json:"processed"`
+	MessageIDs map[string]bool `json:"message_ids"`
 }
 
 func LoadState(path string) (*MigrationState, error) {
 
 	state := &MigrationState{
-		Processed: map[string]bool{},
+		Processed:  map[string]bool{},
+		MessageIDs: map[string]bool{},
 	}
 
 	f, err := os.Open(path)
@@ -34,6 +36,34 @@ func LoadState(path string) (*MigrationState, error) {
 	err = json.NewDecoder(f).Decode(state)
 
 	return state, err
+}
+
+func (s *MigrationState) HasMessageID(
+	id string,
+) bool {
+
+	if id == "" {
+		return false
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return s.MessageIDs[id]
+}
+
+func (s *MigrationState) MarkMessageID(
+	id string,
+) {
+
+	if id == "" {
+		return
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.MessageIDs[id] = true
 }
 
 func (s *MigrationState) Save(

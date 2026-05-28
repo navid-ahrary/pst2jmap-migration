@@ -193,8 +193,7 @@ func main() {
 				return nil
 			}
 
-			msg, err :=
-				pst.ParseMessage(path)
+			msg, err := pst.ParseMessage(path)
 
 			if err != nil {
 
@@ -208,12 +207,19 @@ func main() {
 				return nil
 			}
 
-			mailboxID :=
-				jmap.ResolveMailboxID(
-					msg.Folder,
-					mailboxes,
+			mailboxID := jmap.ResolveMailboxID(msg.Folder, mailboxes)
+
+			if state.HasMessageID(msg.MessageID) {
+
+				stats.IncrementSkipped()
+
+				fmt.Printf(
+					"DUPLICATE MESSAGE-ID: %s\n",
+					msg.MessageID,
 				)
 
+				return nil
+			}
 			fmt.Println()
 
 			fmt.Printf(
@@ -240,18 +246,13 @@ func main() {
 
 			var blobID string
 
-			err = jmap.Retry(
-				3,
-				2*time.Second,
-				func() error {
+			err = jmap.Retry(3, 2*time.Second, func() error {
+				var uploadErr error
 
-					var uploadErr error
+				blobID, uploadErr = client.UploadEML(path)
 
-					blobID, uploadErr =
-						client.UploadEML(path)
-
-					return uploadErr
-				},
+				return uploadErr
+			},
 			)
 
 			if err != nil {
@@ -271,16 +272,13 @@ func main() {
 				blobID,
 			)
 
-			err = jmap.Retry(
-				3,
-				2*time.Second,
-				func() error {
+			err = jmap.Retry(3, 2*time.Second, func() error {
 
-					return client.ImportEmail(
-						blobID,
-						mailboxID,
-					)
-				},
+				return client.ImportEmail(
+					blobID,
+					mailboxID,
+				)
+			},
 			)
 
 			if err != nil {
@@ -295,11 +293,10 @@ func main() {
 				return nil
 			}
 
+			state.MarkMessageID(msg.MessageID)
 			state.MarkProcessed(path)
 
-			err = state.Save(
-				STATE_FILE,
-			)
+			err = state.Save(STATE_FILE)
 
 			if err != nil {
 
