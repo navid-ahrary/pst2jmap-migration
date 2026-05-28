@@ -11,7 +11,10 @@ import (
 	"github.com/navid/pst2jmap-migration/internal/pst"
 )
 
-const JMAP_URL string = "https://postmaster.collab24.net/jmap"
+const (
+	JMAP_URL   = "https://postmaster.collab24.net/jmap"
+	STATE_FILE = "migration-state.json"
+)
 
 var version = "dev"
 
@@ -66,6 +69,19 @@ func main() {
 		password,
 	)
 
+	state, err :=
+		pst.LoadState(
+			STATE_FILE,
+		)
+
+	if err != nil {
+
+		exit(
+			"failed to load migration state",
+			err,
+		)
+	}
+
 	ctx := context.Background()
 
 	fmt.Println("Extracting PST...")
@@ -76,6 +92,7 @@ func main() {
 	)
 
 	if err != nil {
+
 		exit(
 			"failed to extract PST",
 			err,
@@ -95,6 +112,7 @@ func main() {
 	err = client.Connect()
 
 	if err != nil {
+
 		exit(
 			"failed to connect jmap",
 			err,
@@ -112,6 +130,7 @@ func main() {
 		client.GetMailboxIDs()
 
 	if err != nil {
+
 		exit(
 			"failed to get mailboxes",
 			err,
@@ -137,6 +156,7 @@ func main() {
 		)
 
 	if err != nil {
+
 		exit(
 			"failed to count messages",
 			err,
@@ -161,21 +181,38 @@ func main() {
 	err = reader.Walk(
 		func(path string) error {
 
-			msg, err := pst.ParseMessage(path)
+			if state.IsProcessed(path) {
+
+				stats.IncrementSkipped()
+
+				fmt.Printf(
+					"SKIPPED: %s\n",
+					path,
+				)
+
+				return nil
+			}
+
+			msg, err :=
+				pst.ParseMessage(path)
 
 			if err != nil {
 
 				stats.IncrementFailed()
 
-				fmt.Printf("PARSE FAILED: %v\n", err)
+				fmt.Printf(
+					"PARSE FAILED: %v\n",
+					err,
+				)
 
 				return nil
 			}
 
-			mailboxID := jmap.ResolveMailboxID(
-				msg.Folder,
-				mailboxes,
-			)
+			mailboxID :=
+				jmap.ResolveMailboxID(
+					msg.Folder,
+					mailboxes,
+				)
 
 			fmt.Println()
 
@@ -186,23 +223,36 @@ func main() {
 				path,
 			)
 
-			fmt.Printf("Folder: %s\n", msg.Folder)
+			fmt.Printf(
+				"Folder: %s\n",
+				msg.Folder,
+			)
 
-			fmt.Printf("Subject: %s\n", msg.Subject)
+			fmt.Printf(
+				"Subject: %s\n",
+				msg.Subject,
+			)
 
-			fmt.Printf("Mailbox: %s\n", mailboxID)
+			fmt.Printf(
+				"Mailbox: %s\n",
+				mailboxID,
+			)
 
 			var blobID string
 
-			err = jmap.Retry(3, 2*time.Second, func() error {
+			err = jmap.Retry(
+				3,
+				2*time.Second,
+				func() error {
 
-				var uploadErr error
+					var uploadErr error
 
-				blobID, uploadErr =
-					client.UploadEML(path)
+					blobID, uploadErr =
+						client.UploadEML(path)
 
-				return uploadErr
-			})
+					return uploadErr
+				},
+			)
 
 			if err != nil {
 
@@ -245,6 +295,20 @@ func main() {
 				return nil
 			}
 
+			state.MarkProcessed(path)
+
+			err = state.Save(
+				STATE_FILE,
+			)
+
+			if err != nil {
+
+				fmt.Printf(
+					"WARNING: failed to save state: %v\n",
+					err,
+				)
+			}
+
 			stats.IncrementImported()
 
 			folderCounts[msg.Folder]++
@@ -256,6 +320,7 @@ func main() {
 	)
 
 	if err != nil {
+
 		exit(
 			"migration failed",
 			err,
