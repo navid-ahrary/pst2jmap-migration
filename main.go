@@ -5,7 +5,6 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/navid/pst2jmap-migration/internal/jmap"
@@ -109,10 +108,14 @@ func main() {
 
 	fmt.Println()
 
-	mailboxes, err := client.GetMailboxIDs()
+	mailboxes, err :=
+		client.GetMailboxIDs()
 
 	if err != nil {
-		exit("failed to get mailboxes", err)
+		exit(
+			"failed to get mailboxes",
+			err,
+		)
 	}
 
 	fmt.Println("Detected mailboxes:")
@@ -151,106 +154,104 @@ func main() {
 		total,
 	)
 
-	fmt.Println("Scanning messages...")
+	fmt.Println("Starting migration...")
 
 	folderCounts := map[string]int{}
-
-	imported := false
 
 	err = reader.Walk(
 		func(path string) error {
 
-			if imported {
-				return filepath.SkipAll
-			}
-
-			msg, err :=
-				pst.ParseMessage(path)
+			msg, err := pst.ParseMessage(path)
 
 			if err != nil {
 
-				fmt.Println(
-					"PARSE FAILED:",
-					err,
-				)
+				stats.IncrementFailed()
+
+				fmt.Printf("PARSE FAILED: %v\n", err)
 
 				return nil
 			}
 
-			mailboxID :=
-				jmap.ResolveMailboxID(
-					msg.Folder,
-					mailboxes,
-				)
+			mailboxID := jmap.ResolveMailboxID(
+				msg.Folder,
+				mailboxes,
+			)
 
 			fmt.Println()
-			fmt.Println(
-				"Testing EML:",
+
+			fmt.Printf(
+				"[%d/%d] %s\n",
+				stats.Processed+1,
+				stats.TotalMessages,
 				path,
 			)
 
-			fmt.Println(
-				"Folder:",
-				msg.Folder,
-			)
+			fmt.Printf("Folder: %s\n", msg.Folder)
 
-			fmt.Println(
-				"Subject:",
-				msg.Subject,
-			)
+			fmt.Printf("Subject: %s\n", msg.Subject)
 
-			fmt.Println(
-				"Mailbox:",
-				mailboxID,
-			)
+			fmt.Printf("Mailbox: %s\n", mailboxID)
 
-			blobID, err :=
-				client.UploadEML(
-					path,
-				)
+			var blobID string
+
+			err = jmap.Retry(3, 2*time.Second, func() error {
+
+				var uploadErr error
+
+				blobID, uploadErr =
+					client.UploadEML(path)
+
+				return uploadErr
+			})
 
 			if err != nil {
 
-				fmt.Println(
-					"UPLOAD FAILED:",
+				stats.IncrementFailed()
+
+				fmt.Printf(
+					"UPLOAD FAILED: %v\n",
 					err,
 				)
 
 				return nil
 			}
 
-			fmt.Println(
-				"Uploaded blob:",
+			fmt.Printf(
+				"Uploaded blob: %s\n",
 				blobID,
 			)
 
-			err =
-				client.ImportEmail(
-					blobID,
-					mailboxID,
-				)
+			err = jmap.Retry(
+				3,
+				2*time.Second,
+				func() error {
+
+					return client.ImportEmail(
+						blobID,
+						mailboxID,
+					)
+				},
+			)
 
 			if err != nil {
 
-				fmt.Println(
-					"IMPORT FAILED:",
+				stats.IncrementFailed()
+
+				fmt.Printf(
+					"IMPORT FAILED: %v\n",
 					err,
 				)
 
 				return nil
 			}
 
-			fmt.Println(
-				"Email imported successfully",
-			)
+			stats.IncrementImported()
 
 			folderCounts[msg.Folder]++
 
-			stats.IncrementImported()
+			fmt.Println("SUCCESS")
 
-			imported = true
-
-			return filepath.SkipAll
+			return nil
 		},
 	)
 

@@ -27,13 +27,6 @@ func NewStats(total int, startedAt time.Time) *Stats {
 	}
 }
 
-func (s *Stats) IncrementProcessed() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	s.Processed++
-}
-
 func (s *Stats) IncrementImported() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
