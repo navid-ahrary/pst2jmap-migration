@@ -22,8 +22,6 @@ func (c *Client) UploadEML(
 
 	url := c.UploadURL()
 
-	fmt.Println(url)
-
 	req, err := http.NewRequest(
 		"POST",
 		url,

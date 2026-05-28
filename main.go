@@ -17,7 +17,9 @@ const JMAP_URL string = "https://postmaster.collab24.net/jmap"
 var version = "dev"
 
 func main() {
+
 	startedAt := time.Now()
+
 	var (
 		pstFile  string
 		username string
@@ -45,7 +47,12 @@ func main() {
 		"Dest. Password",
 	)
 
-	showVersion := flag.Bool("version", false, "Show version")
+	showVersion :=
+		flag.Bool(
+			"version",
+			false,
+			"Show version",
+		)
 
 	flag.Parse()
 
@@ -64,10 +71,16 @@ func main() {
 
 	fmt.Println("Extracting PST...")
 
-	reader, err := pst.NewReader(ctx, pstFile)
+	reader, err := pst.NewReader(
+		ctx,
+		pstFile,
+	)
 
 	if err != nil {
-		exit("failed to extract PST", err)
+		exit(
+			"failed to extract PST",
+			err,
+		)
 	}
 
 	defer reader.Close()
@@ -78,6 +91,8 @@ func main() {
 		password,
 	)
 
+	fmt.Println("Connecting to JMAP...")
+
 	err = client.Connect()
 
 	if err != nil {
@@ -87,28 +102,54 @@ func main() {
 		)
 	}
 
-	inboxID, err := client.GetInboxID()
+	fmt.Println(
+		"Authenticated as:",
+		client.Session.Username,
+	)
+
+	fmt.Println()
+
+	mailboxes, err := client.GetMailboxIDs()
+
+	if err != nil {
+		exit("failed to get mailboxes", err)
+	}
+
+	fmt.Println("Detected mailboxes:")
+
+	for role, id := range mailboxes {
+
+		fmt.Printf(
+			"  %-10s %s\n",
+			role,
+			id,
+		)
+	}
+
+	fmt.Println()
+
+	total, err :=
+		pst.CountMessages(
+			reader.OutputDir,
+		)
+
 	if err != nil {
 		exit(
-			"failed to get inbox",
+			"failed to count messages",
 			err,
 		)
 	}
 
-	fmt.Println(
-		"Inbox mailbox:",
-		inboxID,
+	stats :=
+		pst.NewStats(
+			total,
+			startedAt,
+		)
+
+	fmt.Printf(
+		"Found %d emails\n\n",
+		total,
 	)
-
-	total, err := pst.CountMessages(reader.OutputDir)
-
-	if err != nil {
-		exit("failed to count messages", err)
-	}
-
-	stats := pst.NewStats(total, startedAt)
-
-	fmt.Printf("Found %d emails\n\n", total)
 
 	fmt.Println("Scanning messages...")
 
@@ -123,10 +164,44 @@ func main() {
 				return filepath.SkipAll
 			}
 
+			msg, err :=
+				pst.ParseMessage(path)
+
+			if err != nil {
+
+				fmt.Println(
+					"PARSE FAILED:",
+					err,
+				)
+
+				return nil
+			}
+
+			mailboxID :=
+				jmap.ResolveMailboxID(
+					msg.Folder,
+					mailboxes,
+				)
+
 			fmt.Println()
 			fmt.Println(
 				"Testing EML:",
 				path,
+			)
+
+			fmt.Println(
+				"Folder:",
+				msg.Folder,
+			)
+
+			fmt.Println(
+				"Subject:",
+				msg.Subject,
+			)
+
+			fmt.Println(
+				"Mailbox:",
+				mailboxID,
 			)
 
 			blobID, err :=
@@ -152,7 +227,7 @@ func main() {
 			err =
 				client.ImportEmail(
 					blobID,
-					inboxID,
+					mailboxID,
 				)
 
 			if err != nil {
@@ -169,65 +244,21 @@ func main() {
 				"Email imported successfully",
 			)
 
+			folderCounts[msg.Folder]++
+
+			stats.IncrementImported()
+
 			imported = true
 
 			return filepath.SkipAll
 		},
 	)
 
-	// currentFolder := ""
-
-	// err = reader.Walk(
-	// 	func(path string) error {
-
-	// 		msg, err := pst.ParseMessage(path)
-
-	// 		if err != nil {
-	// 			stats.IncrementFailed()
-	// 			fmt.Printf("FAILED %s: %v\n", path, err)
-	// 			return nil
-	// 		}
-
-	// 		folder := msg.Folder
-
-	// 		if folder == "" {
-	// 			folder = "Unknown"
-	// 		}
-
-	// 		if folder != currentFolder {
-
-	// 			currentFolder = folder
-
-	// 			fmt.Println()
-
-	// 			fmt.Printf("=== Folder: %s ===\n", folder)
-	// 		}
-
-	// 		folderCounts[folder]++
-
-	// 		stats.IncrementImported()
-
-	// 		subject := msg.Subject
-
-	// 		if subject == "" {
-	// 			subject = "(no subject)"
-	// 		}
-
-	// 		fmt.Printf(
-	// 			"[%d/%d] (%s #%d) %s\n",
-	// 			stats.Processed,
-	// 			stats.TotalMessages,
-	// 			folder,
-	// 			folderCounts[folder],
-	// 			subject,
-	// 		)
-
-	// 		return nil
-	// 	},
-	// )
-
 	if err != nil {
-		exit("migration failed", err)
+		exit(
+			"migration failed",
+			err,
+		)
 	}
 
 	stats.Finish()
@@ -236,15 +267,23 @@ func main() {
 	fmt.Println("Folder summary:")
 
 	for folder, count := range folderCounts {
-		fmt.Printf("  %-15s %d\n", folder, count)
+
+		fmt.Printf(
+			"  %-15s %d\n",
+			folder,
+			count,
+		)
 	}
 
 	fmt.Println()
 	fmt.Println(stats)
-
 }
 
-func validate(pstFile string, user string, pass string) {
+func validate(
+	pstFile string,
+	user string,
+	pass string,
+) {
 
 	required := map[string]string{
 		"--pst":      pstFile,
@@ -253,14 +292,31 @@ func validate(pstFile string, user string, pass string) {
 	}
 
 	for k, v := range required {
+
 		if v == "" {
-			fmt.Fprintf(os.Stderr, "ERROR: missing required option %s\n", k)
+
+			fmt.Fprintf(
+				os.Stderr,
+				"ERROR: missing required option %s\n",
+				k,
+			)
+
 			os.Exit(1)
 		}
 	}
 }
 
-func exit(msg string, err error) {
-	fmt.Fprintf(os.Stderr, "ERROR: %s: %v\n", msg, err)
+func exit(
+	msg string,
+	err error,
+) {
+
+	fmt.Fprintf(
+		os.Stderr,
+		"ERROR: %s: %v\n",
+		msg,
+		err,
+	)
+
 	os.Exit(1)
 }
