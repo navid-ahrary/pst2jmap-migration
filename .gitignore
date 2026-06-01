@@ -69,3 +69,4 @@ config.local.*
 
 # Migration state
 migration-state.json
+migration-report.json
