@@ -2,6 +2,7 @@ package pst
 
 import (
 	"encoding/json"
+	"io"
 	"os"
 	"sync"
 )
@@ -33,9 +34,29 @@ func LoadState(path string) (*MigrationState, error) {
 
 	defer f.Close()
 
+	info, err := f.Stat()
+
+	if err != nil {
+		return nil, err
+	}
+
+	if info.Size() == 0 {
+		return state, nil
+	}
+
 	err = json.NewDecoder(f).Decode(state)
 
-	return state, err
+	if err != nil {
+
+		if err == io.EOF {
+			return state, nil
+		}
+
+		return nil, err
+	}
+
+	return state, nil
+
 }
 
 func (s *MigrationState) HasMessageID(

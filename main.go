@@ -5,7 +5,11 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
+
+	"os/signal"
+	"syscall"
 
 	"github.com/navid/pst2jmap-migration/internal/jmap"
 	"github.com/navid/pst2jmap-migration/internal/pst"
@@ -82,7 +86,31 @@ func main() {
 		)
 	}
 
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(
+		context.Background(),
+	)
+
+	defer cancel()
+
+	signals := make(chan os.Signal, 1)
+
+	signal.Notify(
+		signals,
+		os.Interrupt,
+		syscall.SIGTERM,
+	)
+
+	go func() {
+
+		<-signals
+
+		fmt.Println()
+		fmt.Println(
+			"Interrupt received, stopping after current email...",
+		)
+
+		cancel()
+	}()
 
 	fmt.Println("Extracting PST...")
 
@@ -180,6 +208,20 @@ func main() {
 
 	err = reader.Walk(
 		func(path string) error {
+
+			select {
+
+			case <-ctx.Done():
+
+				fmt.Println()
+				fmt.Println(
+					"Migration interrupted.",
+				)
+
+				return filepath.SkipAll
+
+			default:
+			}
 
 			if state.IsProcessed(path) {
 
@@ -325,6 +367,28 @@ func main() {
 	}
 
 	stats.Finish()
+
+	if ctx.Err() != nil {
+
+		fmt.Println()
+		fmt.Println(
+			"Migration stopped by user.",
+		)
+	}
+
+	err = pst.WriteReport(
+		"migration-report.json",
+		stats,
+		folderCounts,
+	)
+
+	if err != nil {
+
+		fmt.Printf(
+			"WARNING: failed to write report: %v\n",
+			err,
+		)
+	}
 
 	fmt.Println()
 	fmt.Println("Folder summary:")

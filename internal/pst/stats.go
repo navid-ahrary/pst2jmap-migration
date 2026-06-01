@@ -153,3 +153,19 @@ Duration: %s`,
 		d,
 	)
 }
+
+func (s *Stats) Snapshot() Stats {
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return Stats{
+		StartedAt:     s.StartedAt,
+		FinishedAt:    s.FinishedAt,
+		TotalMessages: s.TotalMessages,
+		Processed:     s.Processed,
+		Imported:      s.Imported,
+		Failed:        s.Failed,
+		Skipped:       s.Skipped,
+	}
+}
