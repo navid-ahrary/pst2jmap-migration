@@ -16,8 +16,7 @@ import (
 )
 
 const (
-	JMAP_URL   = "https://postmaster.collab24.net/jmap"
-	STATE_FILE = "migration-state.json"
+	JMAP_URL = "https://postmaster.collab24.net/jmap"
 )
 
 var version = "dev"
@@ -32,33 +31,13 @@ func main() {
 		password string
 	)
 
-	flag.StringVar(
-		&pstFile,
-		"pst",
-		"",
-		"Src. Path to PST file",
-	)
+	flag.StringVar(&pstFile, "pst", "", "Src. Path to PST file")
 
-	flag.StringVar(
-		&username,
-		"user",
-		"",
-		"Dest. Username",
-	)
+	flag.StringVar(&username, "user", "", "Dest. Username")
 
-	flag.StringVar(
-		&password,
-		"password",
-		"",
-		"Dest. Password",
-	)
+	flag.StringVar(&password, "password", "", "Dest. Password")
 
-	showVersion :=
-		flag.Bool(
-			"version",
-			false,
-			"Show version",
-		)
+	showVersion := flag.Bool("version", false, "Show version")
 
 	flag.Parse()
 
@@ -67,16 +46,23 @@ func main() {
 		return
 	}
 
-	validate(
-		pstFile,
-		username,
-		password,
-	)
+	validate(pstFile, username, password)
 
-	state, err :=
-		pst.LoadState(
-			STATE_FILE,
-		)
+	migrationDir := pst.MigrationDir(pstFile)
+
+	err := os.MkdirAll(migrationDir, 0755)
+
+	if err != nil {
+		exit("failed to create migration directory", err)
+	}
+
+	stateFile := filepath.Join(migrationDir, "state.json")
+
+	reportFile := filepath.Join(migrationDir, "report.json")
+
+	fmt.Println("Migration workspace:", migrationDir)
+
+	state, err := pst.LoadState(stateFile)
 
 	if err != nil {
 
@@ -338,7 +324,7 @@ func main() {
 			state.MarkMessageID(msg.MessageID)
 			state.MarkProcessed(path)
 
-			err = state.Save(STATE_FILE)
+			err = state.Save(stateFile)
 
 			if err != nil {
 
@@ -377,7 +363,7 @@ func main() {
 	}
 
 	err = pst.WriteReport(
-		"migration-report.json",
+		reportFile,
 		stats,
 		folderCounts,
 	)

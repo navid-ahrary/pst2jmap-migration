@@ -67,6 +67,5 @@ state.sqlite3
 # Local configs
 config.local.*
 
-# Migration state
-migration-state.json
-migration-report.json
+# Migration workspace
+*.migration/
