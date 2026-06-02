@@ -32,7 +32,7 @@ func main() {
 	)
 
 	flag.StringVar(&pstFile, "pst", "", "Src. Path to PST file")
-	flag.StringVar(&username, "user", "", "Dest. Username")\
+	flag.StringVar(&username, "user", "", "Dest. Username")
 	flag.StringVar(&password, "password", "", "Dest. Password")
 	showVersion := flag.Bool("version", false, "Show version")
 
