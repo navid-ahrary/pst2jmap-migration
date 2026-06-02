@@ -7,30 +7,18 @@ import (
 )
 
 type MigrationReport struct {
-	StartedAt time.Time `json:"started_at"`
-
-	FinishedAt time.Time `json:"finished_at"`
-
-	Duration string `json:"duration"`
-
-	TotalMessages int `json:"total_messages"`
-
-	Processed int `json:"processed"`
-
-	Imported int `json:"imported"`
-
-	Failed int `json:"failed"`
-
-	Skipped int `json:"skipped"`
-
-	Folders map[string]int `json:"folders"`
+	StartedAt     time.Time      `json:"started_at"`
+	FinishedAt    time.Time      `json:"finished_at"`
+	Duration      string         `json:"duration"`
+	TotalMessages int            `json:"total_messages"`
+	Processed     int            `json:"processed"`
+	Imported      int            `json:"imported"`
+	Failed        int            `json:"failed"`
+	Skipped       int            `json:"skipped"`
+	Folders       map[string]int `json:"folders"`
 }
 
-func WriteReport(
-	path string,
-	stats *Stats,
-	folders map[string]int,
-) error {
+func WriteReport(path string, stats *Stats, folders map[string]int) error {
 
 	snapshot := stats.Snapshot()
 

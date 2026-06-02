@@ -5,11 +5,7 @@ import (
 	"time"
 )
 
-func Retry(
-	attempts int,
-	sleep time.Duration,
-	fn func() error,
-) error {
+func Retry(attempts int, sleep time.Duration, fn func() error) error {
 
 	var err error
 
@@ -25,12 +21,7 @@ func Retry(
 			break
 		}
 
-		fmt.Printf(
-			"Retry %d/%d after error: %v\n",
-			i,
-			attempts,
-			err,
-		)
+		fmt.Printf("Retry %d/%d after error: %v\n", i, attempts, err)
 
 		time.Sleep(sleep)
 	}

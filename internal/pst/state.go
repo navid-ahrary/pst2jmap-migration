@@ -59,9 +59,7 @@ func LoadState(path string) (*MigrationState, error) {
 
 }
 
-func (s *MigrationState) HasMessageID(
-	id string,
-) bool {
+func (s *MigrationState) HasMessageID(id string) bool {
 
 	if id == "" {
 		return false
@@ -73,9 +71,7 @@ func (s *MigrationState) HasMessageID(
 	return s.MessageIDs[id]
 }
 
-func (s *MigrationState) MarkMessageID(
-	id string,
-) {
+func (s *MigrationState) MarkMessageID(id string) {
 
 	if id == "" {
 		return
@@ -87,9 +83,7 @@ func (s *MigrationState) MarkMessageID(
 	s.MessageIDs[id] = true
 }
 
-func (s *MigrationState) Save(
-	path string,
-) error {
+func (s *MigrationState) Save(path string) error {
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -116,9 +110,7 @@ func (s *MigrationState) Save(
 	return os.Rename(tmp, path)
 }
 
-func (s *MigrationState) MarkProcessed(
-	path string,
-) {
+func (s *MigrationState) MarkProcessed(path string) {
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -126,9 +118,7 @@ func (s *MigrationState) MarkProcessed(
 	s.Processed[path] = true
 }
 
-func (s *MigrationState) IsProcessed(
-	path string,
-) bool {
+func (s *MigrationState) IsProcessed(path string) bool {
 
 	s.mu.Lock()
 	defer s.mu.Unlock()

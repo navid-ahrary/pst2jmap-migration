@@ -102,9 +102,7 @@ func (r *Reader) Walk(fn func(string) error) error {
 	)
 }
 
-func (r *Reader) Close() error {
-	return nil
-}
+func (r *Reader) Close() error { return nil }
 
 func isAllowedFolder(path string) bool {
 	dir := filepath.Dir(path)

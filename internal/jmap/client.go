@@ -10,28 +10,16 @@ import (
 )
 
 type Client struct {
-	BaseURL  string
-	Username string
-	Password string
-
+	BaseURL   string
+	Username  string
+	Password  string
 	AccountID string
-
-	Session *Session
-
-	HTTP *http.Client
+	Session   *Session
+	HTTP      *http.Client
 }
 
-func NewClient(
-	baseURL string,
-	user string,
-	pass string,
-) *Client {
-
-	baseURL =
-		strings.TrimRight(
-			baseURL,
-			"/",
-		)
+func NewClient(baseURL string, user string, pass string) *Client {
+	baseURL = strings.TrimRight(baseURL, "/")
 
 	return &Client{
 		BaseURL:  baseURL,
@@ -43,19 +31,13 @@ func NewClient(
 }
 
 func (c *Client) Connect() error {
-
-	req, err := c.NewRequest(
-		"GET",
-		c.AuthURL(),
-		nil,
-	)
+	req, err := c.NewRequest("GET", c.AuthURL(), nil)
 
 	if err != nil {
 		return err
 	}
 
-	resp, err :=
-		c.HTTP.Do(req)
+	resp, err := c.HTTP.Do(req)
 
 	if err != nil {
 		return err
@@ -63,30 +45,19 @@ func (c *Client) Connect() error {
 
 	defer resp.Body.Close()
 
-	data, err :=
-		io.ReadAll(
-			resp.Body,
-		)
+	data, err := io.ReadAll(resp.Body)
 
 	if err != nil {
 		return err
 	}
 
 	if resp.StatusCode >= 300 {
-
-		return fmt.Errorf(
-			"http %d: %s",
-			resp.StatusCode,
-			string(data),
-		)
+		return fmt.Errorf("http %d: %s", resp.StatusCode, string(data))
 	}
 
 	var session Session
 
-	err = json.Unmarshal(
-		data,
-		&session,
-	)
+	err = json.Unmarshal(data, &session)
 
 	if err != nil {
 		return err
@@ -122,57 +93,34 @@ func (c *Client) DownloadURL(blobID string, name string) string {
 	return c.BaseURL + "/download/" + c.AccountID + "/" + blobID + "/" + name
 }
 
-func (c *Client) NewRequest(
-	method string,
-	url string,
-	body io.Reader,
-) (*http.Request, error) {
-
-	req, err := http.NewRequest(
-		method,
-		url,
-		body,
-	)
+func (c *Client) NewRequest(method string, url string, body io.Reader) (*http.Request, error) {
+	req, err := http.NewRequest(method, url, body)
 
 	if err != nil {
 		return nil, err
 	}
 
-	req.SetBasicAuth(
-		c.Username,
-		c.Password,
-	)
+	req.SetBasicAuth(c.Username, c.Password)
 
 	return req, nil
 }
 
 func (c *Client) Call(body any) ([]byte, error) {
-
-	b, err :=
-		json.Marshal(body)
+	b, err := json.Marshal(body)
 
 	if err != nil {
 		return nil, err
 	}
 
-	req, err :=
-		c.NewRequest(
-			"POST",
-			c.APIURL(),
-			bytes.NewBuffer(b),
-		)
+	req, err := c.NewRequest("POST", c.APIURL(), bytes.NewBuffer(b))
 
 	if err != nil {
 		return nil, err
 	}
 
-	req.Header.Set(
-		"Content-Type",
-		"application/json",
-	)
+	req.Header.Set("Content-Type", "application/json")
 
-	resp, err :=
-		c.HTTP.Do(req)
+	resp, err := c.HTTP.Do(req)
 
 	if err != nil {
 		return nil, err
@@ -180,22 +128,14 @@ func (c *Client) Call(body any) ([]byte, error) {
 
 	defer resp.Body.Close()
 
-	data, err :=
-		io.ReadAll(
-			resp.Body,
-		)
+	data, err := io.ReadAll(resp.Body)
 
 	if err != nil {
 		return nil, err
 	}
 
 	if resp.StatusCode >= 300 {
-
-		return nil, fmt.Errorf(
-			"http %d: %s",
-			resp.StatusCode,
-			string(data),
-		)
+		return nil, fmt.Errorf("http %d: %s", resp.StatusCode, string(data))
 	}
 
 	return data, nil

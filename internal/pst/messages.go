@@ -13,7 +13,6 @@ import (
 )
 
 func ParseMessage(path string) (*model.Message, error) {
-
 	f, err :=
 		os.Open(path)
 
@@ -44,7 +43,6 @@ func ParseMessage(path string) (*model.Message, error) {
 }
 
 func decodeHeader(value string) string {
-
 	if value == "" {
 		return ""
 	}
@@ -65,11 +63,9 @@ func decodeHeader(value string) string {
 }
 
 func mailboxFromPath(path string) string {
-
 	dir := filepath.Dir(path)
 
 	for {
-
 		name := filepath.Base(dir)
 
 		switch name {

@@ -8,9 +8,7 @@ import (
 	"os"
 )
 
-func (c *Client) UploadEML(
-	path string,
-) (string, error) {
+func (c *Client) UploadEML(path string) (string, error) {
 
 	f, err := os.Open(path)
 
@@ -22,25 +20,14 @@ func (c *Client) UploadEML(
 
 	url := c.UploadURL()
 
-	req, err := http.NewRequest(
-		"POST",
-		url,
-		f,
-	)
+	req, err := http.NewRequest("POST", url, f)
 
 	if err != nil {
 		return "", err
 	}
 
-	req.SetBasicAuth(
-		c.Username,
-		c.Password,
-	)
-
-	req.Header.Set(
-		"Content-Type",
-		"message/rfc822",
-	)
+	req.SetBasicAuth(c.Username, c.Password)
+	req.Header.Set("Content-Type", "message/rfc822")
 
 	resp, err := c.HTTP.Do(req)
 
@@ -50,9 +37,7 @@ func (c *Client) UploadEML(
 
 	defer resp.Body.Close()
 
-	data, err := io.ReadAll(
-		resp.Body,
-	)
+	data, err := io.ReadAll(resp.Body)
 
 	if err != nil {
 		return "", err
@@ -60,20 +45,14 @@ func (c *Client) UploadEML(
 
 	if resp.StatusCode >= 300 {
 
-		return "", fmt.Errorf(
-			"upload failed: %s",
-			string(data),
-		)
+		return "", fmt.Errorf("upload failed: %s", string(data))
 	}
 
 	var result struct {
 		BlobID string `json:"blobId"`
 	}
 
-	err = json.Unmarshal(
-		data,
-		&result,
-	)
+	err = json.Unmarshal(data, &result)
 
 	return result.BlobID, err
 }

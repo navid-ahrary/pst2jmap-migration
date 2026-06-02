@@ -5,11 +5,7 @@ import (
 	"fmt"
 )
 
-func (c *Client) GetMailboxIDs() (
-	map[string]string,
-	error,
-) {
-
+func (c *Client) GetMailboxIDs() (map[string]string, error) {
 	body := map[string]any{
 		"using": []string{
 			"urn:ietf:params:jmap:core",
@@ -39,10 +35,7 @@ func (c *Client) GetMailboxIDs() (
 		MethodResponses [][]json.RawMessage `json:"methodResponses"`
 	}
 
-	err = json.Unmarshal(
-		data,
-		&result,
-	)
+	err = json.Unmarshal(data, &result)
 
 	if err != nil {
 		return nil, err
@@ -60,10 +53,7 @@ func (c *Client) GetMailboxIDs() (
 		} `json:"list"`
 	}
 
-	err = json.Unmarshal(
-		result.MethodResponses[0][1],
-		&response,
-	)
+	err = json.Unmarshal(result.MethodResponses[0][1], &response)
 
 	if err != nil {
 		return nil, err
@@ -89,10 +79,7 @@ func (c *Client) GetMailboxIDs() (
 	return mailboxes, nil
 }
 
-func ResolveMailboxID(
-	folder string,
-	mailboxes map[string]string,
-) string {
+func ResolveMailboxID(folder string, mailboxes map[string]string) string {
 
 	switch folder {
 

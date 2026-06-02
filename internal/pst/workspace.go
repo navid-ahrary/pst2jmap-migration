@@ -5,15 +5,7 @@ import (
 	"strings"
 )
 
-func MigrationDir(
-	pstPath string,
-) string {
-
-	base :=
-		strings.TrimSuffix(
-			pstPath,
-			filepath.Ext(pstPath),
-		)
-
+func MigrationDir(pstPath string) string {
+	base := strings.TrimSuffix(pstPath, filepath.Ext(pstPath))
 	return base + ".migration"
 }

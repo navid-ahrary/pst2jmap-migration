@@ -59,20 +59,14 @@ func (s *Stats) Finish() {
 }
 
 func (s *Stats) Duration() time.Duration {
-
 	if s.FinishedAt.IsZero() {
-		return time.Since(
-			s.StartedAt,
-		)
+		return time.Since(s.StartedAt)
 	}
 
-	return s.FinishedAt.Sub(
-		s.StartedAt,
-	)
+	return s.FinishedAt.Sub(s.StartedAt)
 }
 
 func (s *Stats) Progress() float64 {
-
 	if s.TotalMessages == 0 {
 		return 0
 	}
@@ -81,29 +75,15 @@ func (s *Stats) Progress() float64 {
 }
 
 func (s *Stats) String() string {
-
 	s.mu.Lock()
 
-	processed :=
-		s.Processed
-
-	total :=
-		s.TotalMessages
-
-	imported :=
-		s.Imported
-
-	failed :=
-		s.Failed
-
-	skipped :=
-		s.Skipped
-
-	started :=
-		s.StartedAt
-
-	finished :=
-		s.FinishedAt
+	processed := s.Processed
+	total := s.TotalMessages
+	imported := s.Imported
+	failed := s.Failed
+	skipped := s.Skipped
+	started := s.StartedAt
+	finished := s.FinishedAt
 
 	s.mu.Unlock()
 
@@ -116,25 +96,15 @@ func (s *Stats) String() string {
 	}
 
 	if d < time.Second {
-		d =
-			d.Round(
-				time.Millisecond,
-			)
+		d = d.Round(time.Millisecond)
 	} else {
-		d =
-			d.Round(
-				time.Second,
-			)
+		d = d.Round(time.Second)
 	}
 
-	progress :=
-		0.0
+	progress := 0.0
 
 	if total > 0 {
-		progress =
-			float64(processed) /
-				float64(total) *
-				100
+		progress = float64(processed) / float64(total) * 100
 	}
 
 	return fmt.Sprintf(
@@ -155,7 +125,6 @@ Duration: %s`,
 }
 
 func (s *Stats) Snapshot() Stats {
-
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
