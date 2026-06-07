@@ -7,18 +7,28 @@ import (
 )
 
 type MigrationReport struct {
-	StartedAt     time.Time      `json:"started_at"`
-	FinishedAt    time.Time      `json:"finished_at"`
-	Duration      string         `json:"duration"`
-	TotalMessages int            `json:"total_messages"`
-	Processed     int            `json:"processed"`
-	Imported      int            `json:"imported"`
-	Failed        int            `json:"failed"`
-	Skipped       int            `json:"skipped"`
-	Folders       map[string]int `json:"folders"`
+	StartedAt     time.Time `json:"started_at"`
+	FinishedAt    time.Time `json:"finished_at"`
+	Duration      string    `json:"duration"`
+	TotalMessages int       `json:"total_messages"`
+	Processed     int       `json:"processed"`
+	Imported      int       `json:"imported"`
+
+	Failed   int       `json:"failed"`
+	Failures []Failure `json:"failures"`
+
+	Skipped int            `json:"skipped"`
+	Folders map[string]int `json:"folders"`
 }
 
-func WriteReport(path string, stats *Stats, folders map[string]int) error {
+type Failure struct {
+	Path      string `json:"path"`
+	Subject   string `json:"subject,omitempty"`
+	Operation string `json:"operation"`
+	Error     string `json:"error"`
+}
+
+func WriteReport(path string, stats *Stats, folders map[string]int, failures []Failure) error {
 
 	snapshot := stats.Snapshot()
 
@@ -30,6 +40,7 @@ func WriteReport(path string, stats *Stats, folders map[string]int) error {
 		Processed:     snapshot.Processed,
 		Imported:      snapshot.Imported,
 		Failed:        snapshot.Failed,
+		Failures:      failures,
 		Skipped:       snapshot.Skipped,
 		Folders:       folders,
 	}
@@ -43,7 +54,6 @@ func WriteReport(path string, stats *Stats, folders map[string]int) error {
 	defer f.Close()
 
 	enc := json.NewEncoder(f)
-
 	enc.SetIndent("", "  ")
 
 	return enc.Encode(report)

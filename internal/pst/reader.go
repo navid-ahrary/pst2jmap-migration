@@ -32,10 +32,7 @@ func NewReader(ctx context.Context, pstFile string) (*Reader, error) {
 	// cleanup old extraction
 	_ = os.RemoveAll(outputDir)
 
-	err := os.MkdirAll(
-		outputDir,
-		0755,
-	)
+	err := os.MkdirAll(outputDir, 0755)
 	if err != nil {
 		return nil, err
 	}
@@ -51,17 +48,7 @@ func NewReader(ctx context.Context, pstFile string) (*Reader, error) {
 }
 
 func ExtractPST(ctx context.Context, pstFile string, outputDir string) error {
-
-	cmd := exec.CommandContext(
-		ctx,
-		ReadPSTBinary(),
-		"-D",
-		"-b",
-		"-e",
-		"-o",
-		outputDir,
-		pstFile,
-	)
+	cmd := exec.CommandContext(ctx, ReadPSTBinary(), "-D", "-b", "-e", "-o", outputDir, pstFile)
 
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

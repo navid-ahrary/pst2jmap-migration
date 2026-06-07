@@ -44,7 +44,6 @@ func (c *Client) UploadEML(path string) (string, error) {
 	}
 
 	if resp.StatusCode >= 300 {
-
 		return "", fmt.Errorf("upload failed: %s", string(data))
 	}
 
