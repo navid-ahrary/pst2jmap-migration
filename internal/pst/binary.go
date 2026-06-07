@@ -22,12 +22,16 @@ func ReadPSTBinary() string {
 	exe, err := os.Executable()
 
 	if err != nil {
-		return "readpst.exe"
+		return filepath.Join(
+			"readpst-win",
+			"readpst.exe",
+		)
 	}
 
 	base := filepath.Dir(exe)
 
 	candidates := []string{
+		filepath.Join(base, "readpst-win", "readpst.exe"),
 		filepath.Join(base, "readpst", "readpst.exe"),
 		filepath.Join(base, "readpst.exe"),
 	}
@@ -38,5 +42,8 @@ func ReadPSTBinary() string {
 		}
 	}
 
-	return "readpst.exe"
+	return filepath.Join(
+		"readpst-win",
+		"readpst.exe",
+	)
 }
