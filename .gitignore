@@ -70,3 +70,5 @@ config.local.*
 
 # Migration workspace
 *.migration/
+
+*.csv

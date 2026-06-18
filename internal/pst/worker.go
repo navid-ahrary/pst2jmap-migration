@@ -10,6 +10,6 @@ func StartWorker(wg *sync.WaitGroup, jobs <-chan model.Job, process func(string)
 	defer wg.Done()
 
 	for job := range jobs {
-		_ = process(job.Path)
+		_ = process(job.PSTFile)
 	}
 }

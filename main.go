@@ -5,36 +5,38 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"path/filepath"
-	"sync"
-	"time"
-
 	"os/signal"
+	"sync"
 	"syscall"
 
-	"github.com/navid/pst2jmap-migration/internal/jmap"
+	csvreader "github.com/navid/pst2jmap-migration/internal/csv"
+	"github.com/navid/pst2jmap-migration/internal/migration"
 	"github.com/navid/pst2jmap-migration/internal/model"
-	"github.com/navid/pst2jmap-migration/internal/pst"
 )
 
-const JMAP_URL = "https://postmaster.collab24.net/jmap"
+const DefaultJMAPURL = "https://postmaster.collab24.net/jmap"
 
 var version = "dev"
 
 func main() {
-	startedAt := time.Now()
-
 	var (
-		pstFile  string
-		username string
-		password string
-		workers  int
+		pstFile        string
+		username       string
+		password       string
+		csvFile        string
+		jmapURL        string
+		workers        int
+		mailboxWorkers int
 	)
 
-	flag.StringVar(&pstFile, "pst", "", "Src. Path to PST file")
-	flag.StringVar(&username, "user", "", "Dest. Username")
-	flag.StringVar(&password, "password", "", "Dest. Password")
+	flag.StringVar(&pstFile, "pst", "", "Source PST file")
+	flag.StringVar(&username, "user", "", "Destination username")
+	flag.StringVar(&password, "password", "", "Destination password")
+	flag.StringVar(&csvFile, "csv", "", "CSV job file")
+	flag.StringVar(&jmapURL, "jmap", DefaultJMAPURL, "JMAP endpoint")
+	flag.IntVar(&mailboxWorkers, "mailbox-workers", 3, "Number of parallel mailbox migrations")
 	flag.IntVar(&workers, "workers", 20, "Number of transfer workers")
+
 	showVersion := flag.Bool("version", false, "Show version")
 
 	flag.Parse()
@@ -44,152 +46,250 @@ func main() {
 		return
 	}
 
-	validate(pstFile, username, password, workers)
-
-	migrationDir := pst.MigrationDir(pstFile)
-
-	err := os.MkdirAll(migrationDir, 0755)
-	if err != nil {
-		exit("failed to create migration directory", err)
-	}
-
-	stateFile := filepath.Join(migrationDir, "state.json")
-	reportFile := filepath.Join(migrationDir, "report.json")
-
-	fmt.Println("Migration workspace:", migrationDir)
-
-	state, err := pst.LoadState(stateFile)
-	if err != nil {
-		exit("failed to load migration state", err)
-	}
-
 	ctx, cancel := context.WithCancel(context.Background())
-
 	defer cancel()
 
+	setupSignalHandler(cancel)
+
+	// CSV mode
+	if csvFile != "" {
+		if err := runCSV(ctx, csvFile, jmapURL, workers, mailboxWorkers); err != nil {
+			exit("csv migration failed", err)
+		}
+		return
+	}
+
+	// Single mailbox mode
+	validateSingle(pstFile, username, password, workers)
+	if err := migration.Run(ctx, pstFile, username, password, jmapURL, workers, 1); err != nil {
+		exit("migration failed", err)
+	}
+}
+
+func runCSV(
+	ctx context.Context,
+	csvPath string,
+	jmapURL string,
+	workers int,
+	mailboxWorkers int,
+) error {
+
+	jobs, err := csvreader.ReadJobs(csvPath)
+	if err != nil {
+		return fmt.Errorf("read csv: %w", err)
+	}
+
+	fmt.Printf(
+		"Loaded %d migration jobs\n",
+		len(jobs),
+	)
+
+	jobChan := make(chan model.Job)
+
+	var (
+		wg sync.WaitGroup
+
+		successCount int
+		failedCount  int
+		skippedCount int
+
+		results []model.MigrationResult
+
+		mu sync.Mutex
+	)
+
+	for i := 0; i < mailboxWorkers; i++ {
+
+		wg.Add(1)
+
+		go func(workerID int) {
+
+			defer wg.Done()
+
+			for job := range jobChan {
+
+				select {
+
+				case <-ctx.Done():
+					return
+
+				default:
+				}
+
+				fmt.Printf(
+					"\n[Mailbox Worker %d] Row %d - %s\n",
+					workerID,
+					job.Row,
+					job.Email,
+				)
+
+				if err := validateJob(job); err != nil {
+
+					mu.Lock()
+
+					skippedCount++
+
+					results = append(
+						results,
+						model.MigrationResult{
+							Row:     job.Row,
+							Email:   job.Email,
+							PSTFile: job.PSTFile,
+							Status:  "SKIPPED",
+							Error:   err.Error(),
+						},
+					)
+
+					mu.Unlock()
+
+					fmt.Printf(
+						"SKIPPED row %d (%s): %v\n",
+						job.Row,
+						job.Email,
+						err,
+					)
+
+					continue
+				}
+
+				err := migration.Run(
+					ctx,
+					job.PSTFile,
+					job.Email,
+					job.Password,
+					jmapURL,
+					workers,
+					mailboxWorkers,
+				)
+
+				mu.Lock()
+
+				if err != nil {
+
+					failedCount++
+
+					results = append(
+						results,
+						model.MigrationResult{
+							Row:     job.Row,
+							Email:   job.Email,
+							PSTFile: job.PSTFile,
+							Status:  "FAILED",
+							Error:   err.Error(),
+						},
+					)
+
+					mu.Unlock()
+
+					fmt.Printf(
+						"FAILED row %d (%s): %v\n",
+						job.Row,
+						job.Email,
+						err,
+					)
+
+					continue
+				}
+
+				successCount++
+
+				results = append(
+					results,
+					model.MigrationResult{
+						Row:     job.Row,
+						Email:   job.Email,
+						PSTFile: job.PSTFile,
+						Status:  "SUCCESS",
+					},
+				)
+
+				mu.Unlock()
+
+				fmt.Printf(
+					"SUCCESS row %d (%s)\n",
+					job.Row,
+					job.Email,
+				)
+			}
+
+		}(i + 1)
+	}
+
+	go func() {
+
+		defer close(jobChan)
+
+		for _, job := range jobs {
+
+			select {
+
+			case <-ctx.Done():
+				return
+
+			case jobChan <- job:
+			}
+		}
+
+	}()
+
+	wg.Wait()
+
+	resultFile := csvPath + ".result.csv"
+
+	if err := csvreader.WriteResults(
+		resultFile,
+		results,
+	); err != nil {
+
+		fmt.Printf(
+			"WARNING: failed to write result file: %v\n",
+			err,
+		)
+	}
+
+	fmt.Println()
+	fmt.Println("==================================================")
+	fmt.Println("Migration Summary")
+	fmt.Println("==================================================")
+
+	fmt.Printf("Total Jobs : %d\n", len(jobs))
+	fmt.Printf("Successful: %d\n", successCount)
+	fmt.Printf("Failed    : %d\n", failedCount)
+	fmt.Printf("Skipped   : %d\n", skippedCount)
+
+	fmt.Printf(
+		"\nResult report written to: %s\n",
+		resultFile,
+	)
+
+	return nil
+}
+
+func setupSignalHandler(cancel context.CancelFunc) {
 	signals := make(chan os.Signal, 1)
-	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
+
+	signal.Notify(
+		signals,
+		os.Interrupt,
+		syscall.SIGTERM,
+	)
 
 	go func() {
 		<-signals
 
 		fmt.Println()
-		fmt.Println("Interrupt received, stopping after current email...")
+		fmt.Println("Interrupt received, stopping...")
 
 		cancel()
 	}()
-
-	fmt.Println("Extracting PST...")
-
-	reader, err := pst.NewReader(ctx, pstFile)
-
-	if err != nil {
-		exit("failed to extract PST", err)
-	}
-
-	defer reader.Close()
-
-	client := jmap.NewClient(JMAP_URL, username, password)
-
-	fmt.Println("Connecting to JMAP...")
-
-	err = client.Connect()
-
-	if err != nil {
-		exit("failed to connect jmap", err)
-	}
-
-	fmt.Println("Authenticated as:", client.Session.Username)
-	fmt.Println()
-
-	mailboxes, err := client.GetMailboxIDs()
-
-	if err != nil {
-		exit("failed to get mailboxes", err)
-	}
-
-	fmt.Println("Detected mailboxes:")
-
-	for role, id := range mailboxes {
-		fmt.Printf("  %-10s %s\n", role, id)
-	}
-
-	fmt.Println()
-
-	total, err := pst.CountMessages(reader.OutputDir)
-
-	if err != nil {
-		exit("failed to count messages", err)
-	}
-
-	stats := pst.NewStats(total, startedAt)
-	failures := pst.NewFailures()
-
-	fmt.Printf("Found %d emails\n\n", total)
-	fmt.Println("Starting migration...")
-
-	folderCounts := pst.NewFolderCounts()
-
-	jobs := make(chan model.Job, 100)
-
-	var wg sync.WaitGroup
-
-	for i := 0; i < workers; i++ {
-		wg.Add(1)
-
-		go pst.StartWorker(&wg, jobs, func(path string) error {
-			return pst.ProcessEmail(path, client, mailboxes, state, stats, folderCounts, failures, stateFile)
-		})
-	}
-
-	err = reader.Walk(func(path string) error {
-		select {
-
-		case <-ctx.Done():
-			return filepath.SkipAll
-
-		default:
-		}
-
-		jobs <- model.Job{
-			Path: path,
-		}
-
-		return nil
-	})
-
-	close(jobs)
-	wg.Wait()
-
-	if err != nil {
-		exit("migration failed", err)
-	}
-
-	stats.Finish()
-
-	if ctx.Err() != nil {
-		fmt.Println()
-		fmt.Println("Migration stopped by user.")
-	}
-
-	err = pst.WriteReport(reportFile, stats, folderCounts.Snapshot(), failures.Snapshot())
-
-	if err != nil {
-		fmt.Printf("WARNING: failed to write report: %v\n", err)
-	}
-
-	fmt.Println()
-	fmt.Println("Folder summary:")
-
-	for folder, count := range folderCounts.Snapshot() {
-		fmt.Printf("  %-15s %d\n", folder, count)
-	}
-
-	fmt.Println()
-	fmt.Println(stats)
 }
 
-func validate(pstFile string, user string, pass string, workers int) {
+func validateSingle(
+	pstFile string,
+	user string,
+	pass string,
+	workers int,
+) {
 	required := map[string]string{
 		"--pst":      pstFile,
 		"--user":     user,
@@ -198,7 +298,11 @@ func validate(pstFile string, user string, pass string, workers int) {
 
 	for k, v := range required {
 		if v == "" {
-			fmt.Fprintf(os.Stderr, "ERROR: missing required option %s\n", k)
+			fmt.Fprintf(
+				os.Stderr,
+				"ERROR: missing required option %s\n",
+				k,
+			)
 			os.Exit(1)
 		}
 	}
@@ -212,7 +316,37 @@ func validate(pstFile string, user string, pass string, workers int) {
 	}
 }
 
+func validateJob(job model.Job) error {
+
+	if job.Email == "" {
+		return fmt.Errorf("missing email")
+	}
+
+	if job.Password == "" {
+		return fmt.Errorf("missing password")
+	}
+
+	if job.PSTFile == "" {
+		return fmt.Errorf("missing pst file")
+	}
+
+	if _, err := os.Stat(job.PSTFile); err != nil {
+		return fmt.Errorf(
+			"pst file not found: %s",
+			job.PSTFile,
+		)
+	}
+
+	return nil
+}
+
 func exit(msg string, err error) {
-	fmt.Fprintf(os.Stderr, "ERROR: %s: %v\n", msg, err)
+	fmt.Fprintf(
+		os.Stderr,
+		"ERROR: %s: %v\n",
+		msg,
+		err,
+	)
+
 	os.Exit(1)
 }
