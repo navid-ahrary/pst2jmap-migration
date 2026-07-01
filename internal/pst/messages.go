@@ -13,6 +13,7 @@ import (
 )
 
 func ParseMessage(path string) (*model.Message, error) {
+
 	f, err :=
 		os.Open(path)
 

@@ -153,10 +153,12 @@ func Run(
 		wg.Add(1)
 
 		go pst.StartWorker(
+			ctx,
 			&wg,
 			jobs,
-			func(path string) error {
+			func(ctx context.Context, path string) error {
 				return pst.ProcessEmail(
+					ctx,
 					path,
 					client,
 					mailboxes,

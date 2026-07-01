@@ -79,10 +79,7 @@ func runCSV(
 		return fmt.Errorf("read csv: %w", err)
 	}
 
-	fmt.Printf(
-		"Loaded %d migration jobs\n",
-		len(jobs),
-	)
+	fmt.Printf("Loaded %d migration jobs\n", len(jobs))
 
 	jobChan := make(chan model.Job)
 
@@ -99,11 +96,9 @@ func runCSV(
 	)
 
 	for i := 0; i < mailboxWorkers; i++ {
-
 		wg.Add(1)
 
 		go func(workerID int) {
-
 			defer wg.Done()
 
 			for job := range jobChan {
@@ -116,15 +111,9 @@ func runCSV(
 				default:
 				}
 
-				fmt.Printf(
-					"\n[Mailbox Worker %d] Row %d - %s\n",
-					workerID,
-					job.Row,
-					job.Email,
-				)
+				fmt.Printf("\n[Mailbox Worker %d] Row %d - %s\n", workerID, job.Row, job.Email)
 
 				if err := validateJob(job); err != nil {
-
 					mu.Lock()
 
 					skippedCount++
@@ -142,13 +131,7 @@ func runCSV(
 
 					mu.Unlock()
 
-					fmt.Printf(
-						"SKIPPED row %d (%s): %v\n",
-						job.Row,
-						job.Email,
-						err,
-					)
-
+					fmt.Printf("SKIPPED row %d (%s): %v\n", job.Row, job.Email, err)
 					continue
 				}
 
@@ -165,7 +148,6 @@ func runCSV(
 				mu.Lock()
 
 				if err != nil {
-
 					failedCount++
 
 					results = append(
@@ -180,13 +162,7 @@ func runCSV(
 					)
 
 					mu.Unlock()
-
-					fmt.Printf(
-						"FAILED row %d (%s): %v\n",
-						job.Row,
-						job.Email,
-						err,
-					)
+					fmt.Printf("FAILED row %d (%s): %v\n", job.Row, job.Email, err)
 
 					continue
 				}
@@ -204,47 +180,31 @@ func runCSV(
 				)
 
 				mu.Unlock()
-
-				fmt.Printf(
-					"SUCCESS row %d (%s)\n",
-					job.Row,
-					job.Email,
-				)
+				fmt.Printf("SUCCESS row %d (%s)\n", job.Row, job.Email)
 			}
 
 		}(i + 1)
 	}
 
 	go func() {
-
 		defer close(jobChan)
 
 		for _, job := range jobs {
-
 			select {
-
 			case <-ctx.Done():
 				return
 
 			case jobChan <- job:
 			}
 		}
-
 	}()
 
 	wg.Wait()
 
 	resultFile := csvPath + ".result.csv"
 
-	if err := csvreader.WriteResults(
-		resultFile,
-		results,
-	); err != nil {
-
-		fmt.Printf(
-			"WARNING: failed to write result file: %v\n",
-			err,
-		)
+	if err := csvreader.WriteResults(resultFile, results); err != nil {
+		fmt.Printf("WARNING: failed to write result file: %v\n", err)
 	}
 
 	fmt.Println()
@@ -257,10 +217,7 @@ func runCSV(
 	fmt.Printf("Failed    : %d\n", failedCount)
 	fmt.Printf("Skipped   : %d\n", skippedCount)
 
-	fmt.Printf(
-		"\nResult report written to: %s\n",
-		resultFile,
-	)
+	fmt.Printf("\nResult report written to: %s\n", resultFile)
 
 	return nil
 }
@@ -268,11 +225,7 @@ func runCSV(
 func setupSignalHandler(cancel context.CancelFunc) {
 	signals := make(chan os.Signal, 1)
 
-	signal.Notify(
-		signals,
-		os.Interrupt,
-		syscall.SIGTERM,
-	)
+	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
 
 	go func() {
 		<-signals
@@ -298,26 +251,18 @@ func validateSingle(
 
 	for k, v := range required {
 		if v == "" {
-			fmt.Fprintf(
-				os.Stderr,
-				"ERROR: missing required option %s\n",
-				k,
-			)
+			fmt.Fprintf(os.Stderr, "ERROR: missing required option %s\n", k)
 			os.Exit(1)
 		}
 	}
 
 	if workers < 1 {
-		fmt.Fprintln(
-			os.Stderr,
-			"ERROR: --workers must be greater than 0",
-		)
+		fmt.Fprintln(os.Stderr, "ERROR: --workers must be greater than 0")
 		os.Exit(1)
 	}
 }
 
 func validateJob(job model.Job) error {
-
 	if job.Email == "" {
 		return fmt.Errorf("missing email")
 	}
@@ -331,22 +276,13 @@ func validateJob(job model.Job) error {
 	}
 
 	if _, err := os.Stat(job.PSTFile); err != nil {
-		return fmt.Errorf(
-			"pst file not found: %s",
-			job.PSTFile,
-		)
+		return fmt.Errorf("pst file not found: %s", job.PSTFile)
 	}
 
 	return nil
 }
 
 func exit(msg string, err error) {
-	fmt.Fprintf(
-		os.Stderr,
-		"ERROR: %s: %v\n",
-		msg,
-		err,
-	)
-
+	fmt.Fprintf(os.Stderr, "ERROR: %s: %v\n", msg, err)
 	os.Exit(1)
 }

@@ -1,6 +1,7 @@
 package pst
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -8,6 +9,7 @@ import (
 )
 
 func ProcessEmail(
+	ctx context.Context,
 	path string,
 	client *jmap.Client,
 	mailboxes map[string]string,
@@ -22,6 +24,10 @@ func ProcessEmail(
 		stats.IncrementSkipped()
 		fmt.Printf("SKIPPED (already processed): %s\n", path)
 		return nil
+	}
+
+	if err := checkCancelled(ctx); err != nil {
+		return err
 	}
 
 	msg, err := ParseMessage(path)
@@ -54,10 +60,16 @@ func ProcessEmail(
 
 	var blobID string
 
+	if err := checkCancelled(ctx); err != nil {
+		return err
+	}
+
 	err = jmap.Retry(3, 2*time.Second,
 		func() error {
 			var uploadErr error
+
 			blobID, uploadErr = client.UploadEML(path)
+
 			return uploadErr
 		},
 	)
@@ -75,6 +87,10 @@ func ProcessEmail(
 	}
 
 	fmt.Printf("Uploaded blob: %s\n", blobID)
+
+	if err := checkCancelled(ctx); err != nil {
+		return err
+	}
 
 	err = jmap.Retry(3, 2*time.Second,
 		func() error {
@@ -107,4 +123,13 @@ func ProcessEmail(
 	fmt.Println("SUCCESS")
 
 	return nil
+}
+
+func checkCancelled(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+		return nil
+	}
 }
